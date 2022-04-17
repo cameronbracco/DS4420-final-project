@@ -56,3 +56,16 @@ using `wandb online`.
 
 ## Improvements
 Many, many many
+
+1. One big thing right now is that I set the decay amount to 0 because I don't think my other hyperparameters are set well enough to allow it to get started and really learn otherwise. Hyperparmeters are gonna be hard here.
+
+2. Another is that it's way too slow to even just evaluate the model. I'm assuming this is because of the way I have the neurons/connections/receptors coded. We should figure out another way to do this was is much fast but still clear what's going on. I'm guessing (but haven't confirmed) that the majority of time is spent in the `forward` function. If we can optimize the model that will make doing other stuff much easier.
+
+3. I'd also like to make it so all hyperparameters are set at the absolute top level, instead of the weird mix that I have right now.
+
+4. Actually using other filters besides 128 (and figuring out what he meant by "priming" in one of his posts)
+
+5. Style isn't the greatest...
+
+
+
