@@ -57,15 +57,17 @@ using `wandb online`.
 ## Improvements
 Many, many many
 
-1. One big thing right now is that I set the decay amount to 0 because I don't think my other hyperparameters are set well enough to allow it to get started and really learn otherwise. Hyperparmeters are gonna be hard here.
+1. Moving pre-filter stuff into the pkl or figuring out why it's so slow (so we can run with larger example sizes)
 
-2. Another is that it's way too slow to even just evaluate the model. I'm assuming this is because of the way I have the neurons/connections/receptors coded. We should figure out another way to do this was is much fast but still clear what's going on. I'm guessing (but haven't confirmed) that the majority of time is spent in the `forward` function. If we can optimize the model that will make doing other stuff much easier.
+2. One big thing right now is that I set the decay amount to 0 because I don't think my other hyperparameters are set well enough to allow it to get started and really learn otherwise. Hyperparmeters are gonna be hard here.
 
-3. I'd also like to make it so all hyperparameters are set at the absolute top level, instead of the weird mix that I have right now.
+3. Another is that it's way too slow to even just evaluate the model. I'm assuming this is because of the way I have the neurons/connections/receptors coded. We should figure out another way to do this was is much fast but still clear what's going on. I'm guessing (but haven't confirmed) that the majority of time is spent in the `forward` function. If we can optimize the model that will make doing other stuff much easier.
 
-4. Actually using other filters besides 128 (and figuring out what he meant by "priming" in one of his posts)
+4. I'd also like to make it so all hyperparameters are set at the absolute top level, instead of the weird mix that I have right now.
 
-5. Style isn't the greatest...
+5. Actually using other filters besides 128 (and figuring out what he meant by "priming" in one of his posts)
+
+6. Style isn't the greatest...
 
 
 
