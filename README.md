@@ -6,11 +6,16 @@ Final Project for DS4420 - Machine Learning and Data Mining 2
 
 MNIST is loaded using this extremely helpful script: https://github.com/hsjeong5/MNIST-for-Numpy
 
-The repo should already contain `mnist.pkl`, but if it does not, simply run `python3 mnist.py` to
-download and save a local version of the dataset. One initialized, you can load the data as follows:
+Upon cloning, run `python3 mnist.py` to download and save a local version of the dataset. 
+One initialized (it will be saved in `mnist.pkl`), you can load the data as follows:
 ```python
 x_train, t_train, x_test, t_test = mnist.load()
 ```
+
+Note that we need to further apply some filters to this data, but that's easy to handle.
+However, it seems like applying those filters takes a long time for some reason, so it
+may make more sentence to bake that into the pre-loading (or just figure out how to optimize
+the filters because they shouldn't take as long as they do)
 
 
 ## Metrics
@@ -36,6 +41,17 @@ it's able to achieve essentially 50% accuracy on a held out validation set (also
 
 See this report from the run:
 https://wandb.ai/dpis-disciples/test-project/reports/Day-1-Proof-of-Concept--VmlldzoxODUxMjUy
+
+
+## Running Stuff
+
+NOTE: Before you run the first time, make sure you have run `pip install wandb` and logged in
+using `wandb login` 
+
+Once logged in with `wandb` running should be as simple as `python3 main.py`
+
+If you do not want to sync data to the cloud, run `wandb offline`. This can then be toggled again
+using `wandb online`. 
 
 
 ## Improvements
