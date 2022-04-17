@@ -30,7 +30,7 @@ Project on W&B lives here: https://wandb.ai/dpis-disciples/test-project
 
 
 ## Model
-I first diagramed out the model [here](https://drive.google.com/file/d/1ms71mk4eImrzkVSPj1iwx5C0kbbimDr3/view?usp=sharing)
+I first diagramed out the model [here](https://drive.google.com/file/d/1jAAYdev91q2Cm0j38MTHdHoRY_FjaVfx/view?usp=sharing)
 
 The current iteration is designed for clarity. I've made a whole bunch of unnecessary classes
 (since as we know most of this can just be done with matrices), but I wanted to really
