@@ -3,3 +3,4 @@ wandb
 
 mnist.pkl
 *.gz
+.idea
