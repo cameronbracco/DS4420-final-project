@@ -1,31 +1,20 @@
 import numpy as np
 from PIL import Image
 
-def intensityFilter(data, threshold):
-    if data > threshold:
-        return 1
-    else:
-        return 0
-
-
-def convertToFullScale(data):
-    return data * 255
-
-
 def render(data, isFullScale=False):
     if isFullScale:
-        img = Image.fromarray(vectorizedFullScale(data).reshape(28,28)) # Scaling 1 = 255
-    else:
         img = Image.fromarray(data.reshape(28,28)) # Assuming already scaled
+    else:
+        img = Image.fromarray((data * 255).reshape(28,28)) # Scale all 1's to 255
     img.show() # Show the image
 
 
-def validation(model, numExamples, X, y):
+def validation(model, device, numExamples, X, Y):
     correctCountVal = 0
     for i in range(numExamples):
-        pred, spikeCounts = model.forward(X[i])
+        pred, spikeCounts = model.forward(X[i].to(device))
 
-        if pred == y[i]:
+        if pred == Y[i]:
             correctCountVal += 1
     
     return correctCountVal

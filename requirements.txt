@@ -1,4 +1,5 @@
 numpy
 wandb
-Pillow
+pillow
 tqdm
+torch

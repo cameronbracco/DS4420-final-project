@@ -54,6 +54,7 @@ class Neuron:
         self.mostRecentPotential = incomingPotential
 
         # Determine and return whether or not we should spike
+        # print("Neuron spike time:", neuron_spike_end - neuron_spike_start)
         if self.mostRecentPotential > self.spikeThrehsold:
             return 1
         else:
