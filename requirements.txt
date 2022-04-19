@@ -3,3 +3,5 @@ wandb
 pillow
 tqdm
 torch
+hydra-core
+omegaconf

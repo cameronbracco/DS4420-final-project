@@ -6,3 +6,4 @@ mnist.pkl
 *.gz
 
 .idea
+outputs
