@@ -1,9 +1,11 @@
+import logging
+
 import mnist
 import random
 import numpy as np
 import wandb
 import torch
-from tqdm import tqdm, trange
+from tqdm.auto import tqdm
 from timeit import default_timer as timer
 
 from utils import render, validation
@@ -52,7 +54,8 @@ POSITIVE_REINFORCE_AMOUNT = 100
 NEGATIVE_REINFORCE_AMOUNT = 5
 DECAY_AMOUNT = 0 # For now...
 PRUNE_WEIGHT = -5
-DEVICE = 'cuda'
+LOG_LEVEL = logging.ERROR
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 RANDOM_SEED = 42
 
 # Make sure to set the random seed (should propogate to all other imports of random)
@@ -97,15 +100,15 @@ wandb.config = {
   "device": DEVICE
 }
 
+for epoch in (epoch_pbar := tqdm(range(NUM_EPOCHS), position=0, leave=True)):
 
-for epoch in trange(NUM_EPOCHS):
     correctCountTrain = 0
     train_start = timer()
     num_pos_reinforces = 0
     num_neg_reinforces = 0
     connections_grown = 0
     predictions = [0] * 10
-    for i in trange(NUM_EXAMPLES_TRAIN):
+    for i in range(NUM_EXAMPLES_TRAIN):
         x = x_train_128[i,:].to(DEVICE)
         y = t_train[i].item()
 
@@ -140,15 +143,13 @@ for epoch in trange(NUM_EPOCHS):
     train_accuracy = correctCountTrain / NUM_EXAMPLES_TRAIN
     val_accuracy = correctCountVal / NUM_EXAMPLES_VAL
 
-    print("Epoch", epoch,
-        "train accuracy:", train_accuracy,
-        "avg train time:", avg_train_time_per_example,
-        "val accuracy:", val_accuracy,
-        "avg val time:", avg_val_time_per_example,
-        "positive reinforces", num_pos_reinforces,
-        "negative reinforces", num_neg_reinforces,
-        "\n",
-        "precictions:", predictions)
+    epoch_pbar.set_description(
+        f"Epoch {str(epoch).zfill(len(str(NUM_EPOCHS)))} - train acc: {train_accuracy:.5f} - avg train time: "
+        f"{avg_train_time_per_example:.5f} - val acc: {val_accuracy:.5f} - avg val time: {avg_val_time_per_example:.5f}"
+        f" - reinforcements: +{num_pos_reinforces}/-{num_neg_reinforces}"
+    )
+    if LOG_LEVEL == logging.DEBUG:
+        print(predictions)
 
     # Logging to W&B
     wandb.log({
