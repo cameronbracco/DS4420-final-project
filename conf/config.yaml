@@ -16,4 +16,4 @@ DEVICE: auto
 RANDOM_SEED: 42
 FILTER_THRESHOLD: 128
 WANDB_TAGS: testing,hello_world
-WANDB_MODE: online:
+WANDB_MODE: online
