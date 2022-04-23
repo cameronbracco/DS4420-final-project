@@ -173,5 +173,6 @@ def main(cfg: DictConfig):
 
     print("Done!")
 
+
 if __name__ == "__main__":
     main()
