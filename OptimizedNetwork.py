@@ -71,6 +71,8 @@ class BetterSONN:
         false_column_spikes = torch.cat((spike_counts[0:y_true], spike_counts[y_true+1:]))
         max_false_spike = torch.amax(false_column_spikes)
 
+        # start_time = timer()
+
         # Learn true (if necessary)
         delta_true = spike_counts[y_true] - max_false_spike
         if self.positive_quantilizers[y_true].check(delta_true):
@@ -88,6 +90,10 @@ class BetterSONN:
                    # Negatively reinforce the weights of each neuron in this false column
                    negative_reinforcements.append(i)
                    self.weight_arrays[i] -= self.negative_reinforce_amount
+
+        # end_time = timer()
+        # delta_time = end_time - start_time
+        # print("QUANTILIZERS TIME:", delta_time)
 
         return y_hat, spike_counts, positive_reinforcements, negative_reinforcements
     
