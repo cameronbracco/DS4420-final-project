@@ -9,10 +9,11 @@ def render(data, isFullScale=False):
     img.show() # Show the image
 
 
-def validation(model, device, numExamples, X, Y):
+def validation(model, device, numExamples, X, Y, n_filter_thresholds):
     correctCountVal = 0
     for i in range(numExamples):
-        pred, spikeCounts = model.forward(X[i].to(device))
+        x = [X[filter_idx][i,:].to(device) for filter_idx in range(n_filter_thresholds)]
+        pred, spikeCounts = model.forward(x)
 
         if pred == Y[i]:
             correctCountVal += 1

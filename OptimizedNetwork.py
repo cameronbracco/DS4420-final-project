@@ -28,27 +28,28 @@ class BetterSONN:
         self.negative_reinforce_amount = negative_reinforce_amount
         self.decay_amount = decay_amount
         self.prune_weight = prune_weight
-        self.initial_connection_weight = initial_connection_weight #???
+        self.initial_connection_weight: int = initial_connection_weight
 
         # Connection mask is [columns x neurons per column x input size]
         # Because right now we hard limit the number of connections to match the input size
         # So there's no double sampling of input pixels
-        self.connection_masks = torch.zeros((self.output_size,
-                                            self.num_neurons_per_column,
-                                            self.input_size),
-                                            dtype=torch.uint8,
-                                            device=device)
+        self.connection_masks = torch.zeros(
+            (self.output_size, self.num_neurons_per_column, self.input_size),
+            dtype=torch.uint8,
+            device=device
+        )
 
         # Weights array is also [columns x neurons per column x input size]
         # Because even though they don't always exist, it makes the masking extremely easy                                    
-        self.weight_arrays = torch.full((self.output_size,
-                                        self.num_neurons_per_column,
-                                        self.input_size),
-                                        self.initial_connection_weight,
-                                        dtype=torch.int32,
-                                        device=device)
+        self.weight_arrays = torch.randint(
+            self.initial_connection_weight - 10,
+            self.initial_connection_weight + 10,
+            (self.output_size, self.num_neurons_per_column, self.input_size),
+            dtype=torch.int32,
+            device=device
+        )
         
-        # Initialize the postiive and negative quantilizers for each column
+        # Initialize the positive and negative quantilizers for each column
         self.positive_quantilizers = []
         self.negative_quantilizers = []
         for i in range(output_size):
@@ -115,15 +116,17 @@ class BetterSONN:
 
         return prediction_idx, col_spike_counts
     
-    def count_spikes(self, x):
-        # Calculate potential from active receptors. Will be of size [columns x neurons per column]
-        all_neuron_potentials = torch.sum(x * self.connection_masks * self.weight_arrays, axis=2)
+    def count_spikes(self, x_thresholds):
+        col_spike_counts = 0
+        for x in x_thresholds:
+            # Calculate potential from active receptors. Will be of size [columns x neurons per column]
+            all_neuron_potentials = torch.sum(x * self.connection_masks * self.weight_arrays, axis=2)
 
-        # Whether or not a neuron is spiking. Has shape [columns x neurons per column]
-        all_neuron_spikes = torch.where(all_neuron_potentials < self.spike_threshold, 0, 1)
+            # Whether or not a neuron is spiking. Has shape [columns x neurons per column]
+            all_neuron_spikes = torch.where(all_neuron_potentials < self.spike_threshold, 0, 1)
 
-        # Calculate total spikes per column. Has shape [columns]
-        col_spike_counts = torch.sum(all_neuron_spikes, axis=1)
+            # Calculate total spikes per column. Has shape [columns]
+            col_spike_counts += torch.sum(all_neuron_spikes, axis=1)
 
         return col_spike_counts
  
@@ -152,7 +155,13 @@ class BetterSONN:
             for i in range(num_to_update):
                 connection_index = rand_indices[i]
                 self.connection_masks[neuron_idx[0], neuron_idx[1], connection_index] += 1
-                self.weight_arrays[neuron_idx[0], neuron_idx[1], connection_index] = self.initial_connection_weight
+                self.weight_arrays[neuron_idx[0], neuron_idx[1], connection_index] = \
+                    torch.randint(
+                        self.initial_connection_weight - 10,
+                        self.initial_connection_weight + 10,
+                        (1,)
+                    ).item()
+
 
     def decay(self):
         # All connections decay by the same amount over time
@@ -162,6 +171,8 @@ class BetterSONN:
         # If a connection drops below a specific weight, prune it by clearing the mask
         # NOTE: We don't bother resetting the weight array here, since it will be reset
         #       if the connection is ever re-added
-        self.connection_masks = torch.where(torch.logical_or(self.weight_arrays < self.prune_weight,
-                                            self.connection_masks == 0), 0, 1)
+        self.connection_masks = torch.where(
+            torch.logical_or(self.weight_arrays < self.prune_weight, self.connection_masks == 0),
+            0, 1
+        )
         

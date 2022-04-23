@@ -7,3 +7,5 @@ mnist.pkl
 
 .idea
 outputs
+*ubyte
+*.gz
