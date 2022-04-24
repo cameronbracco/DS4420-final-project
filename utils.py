@@ -12,7 +12,7 @@ def render(data, isFullScale=False):
 def validation(model, device, numExamples, X, Y, n_filter_thresholds):
     correctCountVal = 0
     for i in range(numExamples):
-        x = [X[filter_idx][i,:].to(device) for filter_idx in range(n_filter_thresholds)]
+        x = X[i, :].to(device)
         pred, spikeCounts = model.forward(x)
 
         if pred == Y[i]:
