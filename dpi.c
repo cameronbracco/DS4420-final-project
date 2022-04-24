@@ -21,7 +21,7 @@
 #define INPUT_SIZE 784
 #define NUM_EXAMPLES_TRAIN 60000
 #define NUM_EXAMPLES_TEST 10000
-#define NUM_EXAMPLES_SOMETHING 1000
+#define NUM_EXAMPLES_BATCH 1000
 // size. NUM_CONNECTIONS_PER_NEURON: For 98.9%: 7920. For 98.65% : 792
 #define NUM_CONNECTIONS_PER_NEURON 10 // number of connections per neuron.
 #define NUM_NEURONS_PER_COLUMN 792 // multiple of CPU_THREAD. Number of neurons per column
@@ -31,18 +31,18 @@
 #define THRESHOLD_MAX 1200000
 #define MIN_WEIGHT 97000
 
-#define NUM_THRESHOLD_CYCLES 4 // Number of pixel intensity thresholds
-unsigned char intensityThresholds[NUM_THRESHOLD_CYCLES] = {192, 128, 64, 1};
+#define NUM_FILTER_CYCLES 4 // Number of pixel intensity thresholds
+unsigned char intensityFilters[NUM_FILTER_CYCLES] = {192, 128, 64, 1};
 
 int indexOfSampleInSplit[3][NUM_EXAMPLES_TRAIN];
-int splitSizes[3] = {NUM_EXAMPLES_TRAIN, NUM_EXAMPLES_TEST, NUM_EXAMPLES_SOMETHING};
+int splitSizes[3] = {NUM_EXAMPLES_TRAIN, NUM_EXAMPLES_TEST, NUM_EXAMPLES_BATCH};
 int splitToDatasetMap[3] = {0, 1, 0};
 int splitSize[2];
 unsigned char rawLabels[2][NUM_EXAMPLES_TRAIN]; // Maybe for train/test?
 int rawData[2][NUM_EXAMPLES_TRAIN][INPUT_SIZE]; // Don't know why 2 "channels"
 int notnuls[NUM_EXAMPLES_TRAIN];
-int nbc[OUTPUT_SIZE];
-int nbcn[OUTPUT_SIZE][NUM_NEURONS_PER_COLUMN];
+int numConnectionsPerColumn[OUTPUT_SIZE]; // Total number of connections per column (used for growth)
+int numConnectionsPerNeuronPerColumn[OUTPUT_SIZE][NUM_NEURONS_PER_COLUMN]; // Yeah...
 int zero[NUM_EXAMPLES_TRAIN * OUTPUT_SIZE]; // Literally just a zero-d out array used for memory stuff
 int err[NUM_EXAMPLES_TRAIN]; // Maximum false column spike count - true column spike count
 int spikeCounts[3][NUM_EXAMPLES_TRAIN][OUTPUT_SIZE]; // number of spikes per group and sample
@@ -77,12 +77,12 @@ struct ThreadArgs {
 };
 
 struct timespec multiThreadedWait;
-int mtact_learn[CPU_THREAD];
-int mtact_test[CPU_THREAD];
+int multiThreadedMaskLearn[CPU_THREAD];
+int multiThreadedMaskTest[CPU_THREAD];
 struct ThreadArgs threadArgs[CPU_THREAD];
 struct ThreadArgs threadTestArgs[CPU_THREAD];
-int thrd_test_first[CPU_THREAD];
-int thrd_test_last[CPU_THREAD];
+int threadStartIndices[CPU_THREAD]; // Where thread should start processing
+int threadEndIndices[CPU_THREAD]; // Where thread should stop processing
 int mtadj;
 int mtsample;
 int mta;
@@ -212,7 +212,7 @@ void init_gpu()
 
     cudaSetDevice(0);
 
-    cudaMalloc((void **)&gpu_wd, NUM_THRESHOLD_CYCLES * sizeof(unsigned char));
+    cudaMalloc((void **)&gpu_wd, NUM_FILTER_CYCLES * sizeof(unsigned char));
     for (set = 0; set < 2; set++)
         cudaMalloc((void **)&gpu_in[set], splitSize[set] * INPUT_SIZE * sizeof(unsigned char));
     for (set = 0; set < 3; set++)
@@ -222,7 +222,7 @@ void init_gpu()
     cudaMalloc((void **)&gpu_nsp, splitSize[0] * OUTPUT_SIZE * sizeof(int));
     cudaDeviceSynchronize();
 
-    cudaMemcpy(gpu_wd, intensityThresholds, NUM_THRESHOLD_CYCLES * sizeof(unsigned char), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_wd, intensityFilters, NUM_FILTER_CYCLES * sizeof(unsigned char), cudaMemcpyHostToDevice);
     for (set = 0; set < 2; set++)
     {
         for (i = 0; i < splitSize[set]; i++)
@@ -267,7 +267,7 @@ void test_gpu()
         bssize = 100;
 
     for (startat = 0; startat < splitSizes[listNb]; startat += bssize)
-        Kernel_Test<<<((OUTPUT_SIZE * NUM_NEURONS_PER_COLUMN + 31)) / 32, 32, 0, streams[startat]>>>(NUM_NEURONS_PER_COLUMN, NUM_CONNECTIONS_PER_NEURON, NUM_THRESHOLD_CYCLES, gpu_from, gpu_weight, gpu_in[set], gpu_wd, gpu_nsp,
+        Kernel_Test<<<((OUTPUT_SIZE * NUM_NEURONS_PER_COLUMN + 31)) / 32, 32, 0, streams[startat]>>>(NUM_NEURONS_PER_COLUMN, NUM_CONNECTIONS_PER_NEURON, NUM_FILTER_CYCLES, gpu_from, gpu_weight, gpu_in[set], gpu_wd, gpu_nsp,
                                                                               listNb, gpu_list[listNb], startat, bssize);
     cudaDeviceSynchronize();
 
@@ -309,87 +309,84 @@ void readset(int set, char *name_lbl, char *name_data) {
     close(fdi);
 }
 
-void *test_mt_one(void *args) {
-    struct ThreadArgs *arg;
-    int threadNum;
+// Each thread looks at a subset of data and measures spike counts
+void *testMultiThreaded(void *args) {
+    struct ThreadArgs *arg = (struct ThreadArgs *) args;
+    int threadNum = arg->threadNumber;;
     int column;
     int neuron;
-    int cumulativeActivation;
     int cycle;
     int connection;
-    int r;
-    int l;
-    int set;
-    int sample;
-
-    arg = (struct ThreadArgs *) args;
-    threadNum = arg->threadNumber;
 
     while (1 == 1) {
-        while (!mtact_test[arg->threadNumber])
+        // Thread waits until it is activated
+        while (!multiThreadedMaskTest[arg->threadNumber]) {
             nanosleep(&multiThreadedWait, NULL);
+        }
 
-        set = splitToDatasetMap[listNb];
-        for (l = thrd_test_first[threadNum]; l < thrd_test_last[threadNum]; l++) {
-            sample = indexOfSampleInSplit[listNb][l];
+        int set = splitToDatasetMap[listNb];
+        for (int indexInSplit = threadStartIndices[threadNum]; indexInSplit < threadEndIndices[threadNum]; indexInSplit++) {
+            int sampleIdx = indexOfSampleInSplit[listNb][indexInSplit];
             for (column = 0; column < OUTPUT_SIZE; column++) {
-                spikeCounts[listNb][sample][column] = 0;
+                spikeCounts[listNb][sampleIdx][column] = 0;
                 for (neuron = 0; neuron < NUM_NEURONS_PER_COLUMN; neuron++) {
-                    cumulativeActivation = 0;
-                    for (cycle = 0; cycle < NUM_THRESHOLD_CYCLES; cycle++) {
+                    int cumulativeActivation = 0;
+                    for (cycle = 0; cycle < NUM_FILTER_CYCLES; cycle++) {
                         for (connection = 0; connection < NUM_CONNECTIONS_PER_NEURON; connection++) {
                             // Is this connection on for a specific intensity cycle threshold?
                             // DIFFERENCE: ADDING ALL WEIGHTS ACROSS CYCLES, COMPARE AGAINST THRESHOLD
                             //             This allows for adding the weight multiple times
-                            if (rawData[set][sample][receptorIndices[column][neuron][connection]] >= intensityThresholds[cycle]) {
+                            if (rawData[set][sampleIdx][receptorIndices[column][neuron][connection]] >= intensityFilters[cycle]) {
                                 cumulativeActivation += weights[column][neuron][connection];
                             }
                         }
 
+                        // Theoretically this means you could spike a neuron multiple times per sample
+                        // DIFFERENCE: Spiking multiple times (max 1 per cycle) and bringing forward activations across cycles
                         if (cumulativeActivation > THRESHOLD) {
-                            spikeCounts[listNb][sample][column]++;
+                            spikeCounts[listNb][sampleIdx][column]++;
                             cumulativeActivation = 0;
-                        } else
+                        } else {
+                            // We bring forward activations, but divide by 2 since this filter is half as
+                            // intense as the next
                             cumulativeActivation >>= 1;
+                        }
                     }
                 }
             }
         }
 
-        mtact_test[threadNum] = 0;
+        // Let the thread manager know that we're done processing
+        multiThreadedMaskTest[threadNum] = 0;
     }
 }
 
-int testMultiThreaded() {
+// Manages the threads for testing
+int testMultiThreadedManager() {
     int threadNum;
-    int done;
-    int set;
-    int ok;
-    int l;
-    int is;
-    int b;
-    int isnot;
-    int sample;
-    int a;
 
-    l = 0;
-    a = splitSizes[listNb] / CPU_THREAD;
-    b = splitSizes[listNb] - a * CPU_THREAD;
+    int sampleIndex = 0;
+    int numSamplesPerCPU = splitSizes[listNb] / CPU_THREAD;
+    // There might be some left over...
+    int remainingSamples = splitSizes[listNb] - (numSamplesPerCPU * CPU_THREAD);
     for (threadNum = 0; threadNum < CPU_THREAD; threadNum++) {
-        thrd_test_first[threadNum] = l;
-        thrd_test_last[threadNum] = l + a;
-        if (threadNum < b)
-            thrd_test_last[threadNum]++;
-        l = thrd_test_last[threadNum];
-        mtact_test[threadNum] = 1;
+        threadStartIndices[threadNum] = sampleIndex;
+        threadEndIndices[threadNum] = sampleIndex + numSamplesPerCPU;
+        // Adds 1 to each of the threads while there are some left
+        if (threadNum < remainingSamples) {
+            threadEndIndices[threadNum]++;
+        }
+        sampleIndex = threadEndIndices[threadNum];
+        multiThreadedMaskTest[threadNum] = 1;
     }
 
-    done = 0;
-    while (done != CPU_THREAD) {
+    int numThreadsFinished = 0;
+    while (numThreadsFinished != CPU_THREAD) {
         nanosleep(&multiThreadedWait, NULL);
-        done = 0;
-        for (threadNum = 0; threadNum < CPU_THREAD; threadNum++)
-            done += 1 - mtact_test[threadNum];
+        numThreadsFinished = 0;
+        for (threadNum = 0; threadNum < CPU_THREAD; threadNum++) {
+            numThreadsFinished += 1 - multiThreadedMaskTest[threadNum];
+        }
     }
 }
 
@@ -400,7 +397,7 @@ int test() {
 #ifdef GPU
     test_gpu();
 #else
-    testMultiThreaded();
+    testMultiThreadedManager();
 #endif
     for (int indexInSplit = 0; indexInSplit < splitSizes[listNb]; indexInSplit++) {
         int sampleIdx = indexOfSampleInSplit[listNb][indexInSplit];
@@ -435,7 +432,7 @@ void test_mt_init() {
 
     for (trhdNo = 0; trhdNo < CPU_THREAD; trhdNo++) {
         threadTestArgs[trhdNo].threadNumber = trhdNo;
-        pthread_create(&thrds[trhdNo], NULL, test_mt_one,
+        pthread_create(&thrds[trhdNo], NULL, testMultiThreaded,
                        (void *) &threadTestArgs[trhdNo]);
     }
 }
@@ -456,8 +453,8 @@ void loss(int b) {
                     }
                     if (abs(w) < MIN_WEIGHT) {
                         w = 0;
-                        nbc[a]--;
-                        nbcn[a][n]--;
+                        numConnectionsPerColumn[a]--;
+                        numConnectionsPerNeuronPerColumn[a][n]--;
                     }
                     weights[a][n][s] = w;
                 }
@@ -467,52 +464,66 @@ void loss(int b) {
     }
 }
 
-void connect(int nb, int sample, int a, int init, int g) {
-    int p, p0, f, f0, n, s, i, ii, pn;
+void connect(int maxConnectionsToGrow, int sampleIdx, int column, int initialWeight) {
+    int p;
+    int p0;
+    int f;
+    int f0;
+    int connection;
+    int ii;
+    int pn;
     // short int f0 ;
-    static int ps[1000];
+    static int ps[NUM_EXAMPLES_BATCH];
 
-    if (nbc[a] == NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON)
+    // If we don't need to grow any new connections, return early
+    if (numConnectionsPerColumn[column] == NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON) {
         return;
-    if (NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON - nbc[a] < nb)
-        nb = NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON - nbc[a];
+    }
 
-    for (i = 0; i < nb; i++) {
+    // Limit how many we should grow to how much we have capacity for
+    if ((NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON) - numConnectionsPerColumn[column] < maxConnectionsToGrow) {
+        maxConnectionsToGrow = (NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON) - numConnectionsPerColumn[column];
+    }
+
+    for (int i = 0; i < maxConnectionsToGrow; i++) {
         ii = -1;
         while (i != ii) {
-            ps[i] = rnd(NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON - nbc[a]) + 1;
-            for (ii = 0; ii < i; ii++)
-                if (ps[ii] == ps[i])
+            // WHAT?
+            ps[i] = rnd(maxConnectionsToGrow) + 1;
+            for (ii = 0; ii < i; ii++) {
+                if (ps[ii] == ps[i]) {
                     break;
+                }
+            }
         }
     }
-    qsort(ps, nb, sizeof(int), compinc);
+    qsort(ps, maxConnectionsToGrow, sizeof(int), compinc);
 
-    n = 0;
-    s = 0;
+    int neuron = 0;
+    connection = 0;
     p0 = 0;
 
-    for (i = 0; i < nb; i++) {
+    for (int i = 0; i < maxConnectionsToGrow; i++) {
         p = ps[i];
-        for (; n < NUM_NEURONS_PER_COLUMN && p0 != p; n += (p0 != p)) {
-            if (p0 + NUM_CONNECTIONS_PER_NEURON - nbcn[a][n] < p)
-                p0 += NUM_CONNECTIONS_PER_NEURON - nbcn[a][n];
+        for (; neuron < NUM_NEURONS_PER_COLUMN && p0 != p; neuron += (p0 != p)) {
+            if (p0 + NUM_CONNECTIONS_PER_NEURON - numConnectionsPerNeuronPerColumn[column][neuron] < p)
+                p0 += NUM_CONNECTIONS_PER_NEURON - numConnectionsPerNeuronPerColumn[column][neuron];
             else
-                for (s *= (pn == n); s < NUM_CONNECTIONS_PER_NEURON && p0 != p; s += (p0 != p))
-                    if (!weights[a][n][s])
+                for (connection *= (pn == neuron); connection < NUM_CONNECTIONS_PER_NEURON && p0 != p; connection += (p0 != p))
+                    if (!weights[column][neuron][connection])
                         p0++;
         }
 
-        f = rnd(notnuls[sample]) + 1;
+        f = rnd(notnuls[sampleIdx]) + 1;
         for (f0 = 0; f0 < INPUT_SIZE && f; f0 += (f != 0))
-            if (rawData[0][sample][f0])
+            if (rawData[0][sampleIdx][f0])
                 f--;
 
-        receptorIndices[a][n][s] = f0;
-        weights[a][n][s] = init;
-        nbc[a]++;
-        nbcn[a][n]++;
-        pn = n;
+        receptorIndices[column][neuron][connection] = f0;
+        weights[column][neuron][connection] = initialWeight;
+        numConnectionsPerColumn[column]++;
+        numConnectionsPerNeuronPerColumn[column][neuron]++;
+        pn = neuron;
     }
 }
 
@@ -524,16 +535,16 @@ void *learn_mt_one(void *args) {
 
     arg = (struct ThreadArgs *) args;
     while (1 == 1) {
-        while (!mtact_learn[arg->threadNumber])
+        while (!multiThreadedMaskLearn[arg->threadNumber])
             nanosleep(&multiThreadedWait, NULL);
 
         for (n = arg->startIndex; n < arg->endIndex; n++) {
             tot = 0;
             cnta = 0;
-            for (c = 0; c < NUM_THRESHOLD_CYCLES; c++) {
+            for (c = 0; c < NUM_FILTER_CYCLES; c++) {
                 mask = 1;
                 for (s = 0; s < NUM_CONNECTIONS_PER_NEURON; s++) {
-                    if (weights[mta][n][s] && rawData[0][mtsample][receptorIndices[mta][n][s]] >= intensityThresholds[c]) {
+                    if (weights[mta][n][s] && rawData[0][mtsample][receptorIndices[mta][n][s]] >= intensityFilters[c]) {
                         tot += weights[mta][n][s];
                         cnta |= mask;
                     }
@@ -549,7 +560,7 @@ void *learn_mt_one(void *args) {
                                     weights[mta][n][s] += mtadj;
                                     if (abs(weights[mta][n][s]) < MIN_WEIGHT) {
                                         weights[mta][n][s] = 0;
-                                        nbcn[mta][n]--;
+                                        numConnectionsPerNeuronPerColumn[mta][n]--;
                                     }
                                 }
                             }
@@ -562,7 +573,7 @@ void *learn_mt_one(void *args) {
                 tot >>= 1;
             }
         }
-        mtact_learn[arg->threadNumber] = 0;
+        multiThreadedMaskLearn[arg->threadNumber] = 0;
     }
 }
 
@@ -573,18 +584,18 @@ void learn(int sample, int a, int adj) {
     mtadj = adj;
     mtsample = sample;
     for (trhdNo = 0; trhdNo < CPU_THREAD; trhdNo++)
-        mtact_learn[trhdNo] = 1;
+        multiThreadedMaskLearn[trhdNo] = 1;
 
     done = 0;
     while (done != CPU_THREAD) {
         nanosleep(&multiThreadedWait, NULL);
         done = 0;
         for (trhdNo = 0; trhdNo < CPU_THREAD; trhdNo++)
-            done += 1 - mtact_learn[trhdNo];
+            done += 1 - multiThreadedMaskLearn[trhdNo];
     }
-    nbc[mta] = 0;
+    numConnectionsPerColumn[mta] = 0;
     for (n = 0; n < NUM_NEURONS_PER_COLUMN; n++)
-        nbc[mta] += nbcn[mta][n];
+        numConnectionsPerColumn[mta] += numConnectionsPerNeuronPerColumn[mta][n];
 }
 
 void learn_mt_init() {
@@ -609,11 +620,10 @@ void learn_mt_init() {
 }
 
 void batch() {
-//    int b = 0;
+    int numSamplesLearnedFrom = 0;
     int bu = 0;
     int column;
     int isnot;
-    int g;
     int tot;
     int led;
     int prevStep = 0;
@@ -633,25 +643,27 @@ void batch() {
         }
 
         listNb = 2;
-        test();
+        test(); // NOTE: this function will update the quantilizers
         numBatchesTested++;
 
         for (int indexInBatch = 0; indexInBatch < splitSizes[2]; indexInBatch++) {
             int sampleIdx = indexOfSampleInSplit[2][indexInBatch];
             int yTrue = rawLabels[0][sampleIdx];
 
-            if ((float) (err[sampleIdx]) >= positiveQuantVal || numBatchesTested > b /*lim.@start*/) {
-                connect(nbNew, sampleIdx, yTrue, THRESHOLD / divNew, g);
+            // DIFFERENCE: We always should learn at least once?
+            if ((float) (err[sampleIdx]) >= positiveQuantVal || numBatchesTested > numSamplesLearnedFrom /*lim.@start*/) {
+                // First step of learning is connecting
+                connect(nbNew, sampleIdx, yTrue, THRESHOLD / divNew);
                 learn(sampleIdx, yTrue, adjp);
                 toreload[yTrue] = 1;
                 nblearn++;
-                b++;
+                numSamplesLearnedFrom++;
                 if (lossw && nblearn % losswNb == 0) {
-                    loss(b);
+                    loss(numSamplesLearnedFrom);
                 }
             }
 
-            if (bu > 3 * b / 2)
+            if (bu > 3 * numSamplesLearnedFrom / 2)
                 continue; // limiter for faster startup.
 
             tot = 0;
@@ -661,20 +673,21 @@ void batch() {
                 if (isnot != yTrue) {
                     d = (float) (spikeCounts[2][sampleIdx][isnot] - (tot - spikeCounts[2][sampleIdx][isnot]) / 9);
                     if (negativeQuantValDeltaUp != 0.0 && d >= negativeQuantVal) {
-                        connect(nbNew, sampleIdx, isnot, -THRESHOLD / divNew, g);
+                        // DIFFERENCE: Negative initial weights
+                        connect(nbNew, sampleIdx, isnot, -THRESHOLD / divNew);
                         learn(sampleIdx, isnot, adjn);
                         toreload[isnot] = 1;
                         bu++;
                     }
                 }
             }
-            if (/*b/briefStep >prevStep*/ b % briefStep == 0 && b != prevStep) {
+            if (/*b/briefStep >prevStep*/ numSamplesLearnedFrom % briefStep == 0 && numSamplesLearnedFrom != prevStep) {
                 printf("testing %d: ", nblearn);
                 listNb = 0;
                 printf("0: %2.3f  ", (float) test() / 600.0);
                 listNb = 1;
                 printf("1: %2.2f\n", (float) test() / 100.0);
-                prevStep = b /*/briefStep*/;
+                prevStep = numSamplesLearnedFrom /*/briefStep*/;
             }
         }
     }
