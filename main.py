@@ -77,6 +77,12 @@ def main(cfg: DictConfig):
         ),
         positive_reinforce_amount=cfg.POSITIVE_REINFORCE_AMOUNT,
         negative_reinforce_amount=cfg.NEGATIVE_REINFORCE_AMOUNT,
+        positive_quantilizer_inc_value=cfg.POSITIVE_QUANTILIZER_INC_VALUE,
+        positive_quantilizer_dec_value=cfg.POSITIVE_QUANTILIZER_DEC_VALUE,
+        positive_quantilizer_denom=cfg.POSITIVE_QUANTILIZER_DENOM,
+        negative_quantilizer_increment_value=cfg.NEGATIVE_QUANTILIZER_INC_VALUE,
+        negative_quantilizer_decrement_value=cfg.NEGATIVE_QUANTILIZER_DEC_VALUE,
+        negative_quantilizer_denom=cfg.NEGATIVE_QUANTILIZER_DENOM,
         decay_amount=cfg.DECAY_AMOUNT,
         prune_weight=cfg.PRUNE_WEIGHT,
         device=device
@@ -97,14 +103,22 @@ def main(cfg: DictConfig):
         "initial_connection_weight_delta_max": cfg.INITIAL_CONNECTION_WEIGHT_DELTA_MAX,
         "positive_reinforce_amount": cfg.POSITIVE_REINFORCE_AMOUNT,
         "negative_reinforce_amount": cfg.NEGATIVE_REINFORCE_AMOUNT,
-        "shuffle_batches": cfg.SHUFFLE_BATCHES,
+        "positive_quantilizer_inc_value": cfg.POSITIVE_QUANTILIZER_INC_VALUE,
+        "positive_quantilizer_dec_value": cfg.POSITIVE_QUANTILIZER_DEC_VALUE,
+        "positive_quantilizer_denom": cfg.POSITIVE_QUANTILIZER_DENOM,
+        "negative_quantilizer_inc_value": cfg.NEGATIVE_QUANTILIZER_INC_VALUE,
+        "negative_quantilizer_dec_value": cfg.NEGATIVE_QUANTILIZER_DEC_VALUE,
+        "negative_quantilizer_denom": cfg.NEGATIVE_QUANTILIZER_DENOM,
         "decay_amount": cfg.DECAY_AMOUNT,
         "prune_weight": cfg.PRUNE_WEIGHT,
         "pixel_filter_thresholds": cfg.FILTER_THRESHOLDS,
+        "shuffle_batches": cfg.SHUFFLE_BATCHES,
         "device": device
     }
 
     train_accuracy, avg_train_time_per_example, val_accuracy, avg_val_time_per_example = 0, 0, 0, 0
+
+    update_pbar_every_n = num_examples_train / cfg.UPDATE_PBAR_N_TIMES_PER_EPOCH
 
     for epoch in (epoch_pbar := tqdm(range(cfg.NUM_EPOCHS), position=0, leave=True)):
 
@@ -134,7 +148,7 @@ def main(cfg: DictConfig):
                 correct_count_train += 1
                 correct_count_train_per_class[y] += 1
 
-            if (count + 1) % cfg.UPDATE_PBAR_EVEY_N_SAMPLES == 0:
+            if (count + 1) % update_pbar_every_n == 0:
                 epoch_pbar.set_description(
                     f"Epoch {str(epoch).zfill(len(str(cfg.NUM_EPOCHS)))} "
                     f"({str(count + 1).zfill(len(str(num_examples_train)))}/{num_examples_train}) - "

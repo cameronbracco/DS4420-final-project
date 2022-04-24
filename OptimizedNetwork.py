@@ -18,6 +18,12 @@ class BetterSONN:
             initial_connection_weight_delta=(0, 1),
             positive_reinforce_amount=100,
             negative_reinforce_amount=5,
+            positive_quantilizer_inc_value=19,
+            positive_quantilizer_dec_value=1,
+            positive_quantilizer_denom=100,
+            negative_quantilizer_increment_value=150,
+            negative_quantilizer_decrement_value=1,
+            negative_quantilizer_denom=900,
             decay_amount=0,
             prune_weight=-5,
             device='cuda'
@@ -60,9 +66,23 @@ class BetterSONN:
             device=device
         )
 
-        # Initialize the positive and negative quantilizers for each column
-        self.positive_quantilizer = Quantilizer(19, 1)
-        self.negative_quantilizer = Quantilizer(150, 1)
+        # Initialize the positive and negative quantilizers
+
+        self.positive_quantilizer_increment_value = positive_quantilizer_inc_value
+        self.positive_quantilizer_decrement_value = positive_quantilizer_dec_value
+        self.positive_quantilizer_denom = positive_quantilizer_denom
+        self.positive_quantilizer = Quantilizer(
+            self.positive_quantilizer_increment_value / self.positive_quantilizer_denom,
+            self.positive_quantilizer_decrement_value / self.positive_quantilizer_denom
+        )
+
+        self.negative_quantilizer_increment_value = negative_quantilizer_increment_value
+        self.negative_quantilizer_decrement_value = negative_quantilizer_decrement_value
+        self.negative_quantilizer_denom = negative_quantilizer_denom
+        self.negative_quantilizer = Quantilizer(
+            self.negative_quantilizer_increment_value / self.negative_quantilizer_denom,
+            self.negative_quantilizer_decrement_value / self.negative_quantilizer_denom
+        )
 
     def learn(self, x, y_true):
         # First, get the model's prediction
