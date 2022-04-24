@@ -61,7 +61,13 @@ float positiveQuantValDenom;
 float negativeQuantVal;
 float negativeQuantValDeltaUp;
 float negativeQuantValDenom;
-int adjp, adjn, lossw, losswNb, nbNew, divNew, briefStep;
+int adjp;
+int adjn;
+int lossw;
+int losswNb;
+int maxConnectionsToGrowPerBatch; // Idk why this matters
+int divNew;
+int briefStep;
 // globals
 int nbu;
 int nblearn;
@@ -506,18 +512,24 @@ void connect(int maxConnectionsToGrow, int sampleIdx, int column, int initialWei
     for (int i = 0; i < maxConnectionsToGrow; i++) {
         p = ps[i];
         for (; neuron < NUM_NEURONS_PER_COLUMN && p0 != p; neuron += (p0 != p)) {
-            if (p0 + NUM_CONNECTIONS_PER_NEURON - numConnectionsPerNeuronPerColumn[column][neuron] < p)
+            if (p0 + NUM_CONNECTIONS_PER_NEURON - numConnectionsPerNeuronPerColumn[column][neuron] < p) {
                 p0 += NUM_CONNECTIONS_PER_NEURON - numConnectionsPerNeuronPerColumn[column][neuron];
-            else
-                for (connection *= (pn == neuron); connection < NUM_CONNECTIONS_PER_NEURON && p0 != p; connection += (p0 != p))
-                    if (!weights[column][neuron][connection])
+            }
+            else {
+                for (connection *= (pn == neuron); connection < NUM_CONNECTIONS_PER_NEURON && p0 != p; connection += (p0 != p)) {
+                    if (!weights[column][neuron][connection]) {
                         p0++;
+                    }
+                }
+            }
         }
 
         f = rnd(notnuls[sampleIdx]) + 1;
-        for (f0 = 0; f0 < INPUT_SIZE && f; f0 += (f != 0))
-            if (rawData[0][sampleIdx][f0])
+        for (f0 = 0; f0 < INPUT_SIZE && f; f0 += (f != 0)) {
+            if (rawData[0][sampleIdx][f0]) {
                 f--;
+            }
+        }
 
         receptorIndices[column][neuron][connection] = f0; // Index in INPUT_SIZE to connect to
         weights[column][neuron][connection] = initialWeight;
@@ -653,7 +665,7 @@ void batch() {
             // DIFFERENCE: We always should learn at least once?
             if ((float) (err[sampleIdx]) >= positiveQuantVal || numBatchesTested > numSamplesLearnedFrom /*lim.@start*/) {
                 // First step of learning is connecting
-                connect(nbNew, sampleIdx, yTrue, THRESHOLD / divNew);
+                connect(maxConnectionsToGrowPerBatch, sampleIdx, yTrue, THRESHOLD / divNew);
                 learn(sampleIdx, yTrue, adjp);
                 toreload[yTrue] = 1;
                 nblearn++;
@@ -674,7 +686,7 @@ void batch() {
                     d = (float) (spikeCounts[2][sampleIdx][isnot] - (tot - spikeCounts[2][sampleIdx][isnot]) / 9);
                     if (negativeQuantValDeltaUp != 0.0 && d >= negativeQuantVal) {
                         // DIFFERENCE: Negative initial weights
-                        connect(nbNew, sampleIdx, isnot, -THRESHOLD / divNew);
+                        connect(maxConnectionsToGrowPerBatch, sampleIdx, isnot, -THRESHOLD / divNew);
                         learn(sampleIdx, isnot, adjn);
                         toreload[isnot] = 1;
                         bu++;
@@ -721,7 +733,7 @@ int main() {
     adjp = 500;
     adjn = -500; // 98.9 : 1000 / -1000
     divNew = 10;
-    nbNew = 10; // 98.9 : 10 / 20
+    maxConnectionsToGrowPerBatch = 10; // 98.9 : 10 / 20
     lossw = 20;
     losswNb = 100; // 98.9 : 10 / 100
 
