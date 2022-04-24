@@ -519,7 +519,7 @@ void connect(int maxConnectionsToGrow, int sampleIdx, int column, int initialWei
             if (rawData[0][sampleIdx][f0])
                 f--;
 
-        receptorIndices[column][neuron][connection] = f0;
+        receptorIndices[column][neuron][connection] = f0; // Index in INPUT_SIZE to connect to
         weights[column][neuron][connection] = initialWeight;
         numConnectionsPerColumn[column]++;
         numConnectionsPerNeuronPerColumn[column][neuron]++;
