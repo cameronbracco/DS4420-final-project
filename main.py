@@ -28,7 +28,7 @@ def main(cfg: DictConfig):
         project="test-project",
         entity="dpis-disciples",
         config={k: v for k, v in cfg.items()},
-        tags=cfg.WANDB_TAGS.split(',')
+        tags=cfg.WANDB_TAGS.split()
     )
 
     # Loading MNIST data
@@ -117,8 +117,6 @@ def main(cfg: DictConfig):
         y_trues = [0] * 10
         correct_count_train_per_class = [0] * 10
 
-        n_filter_thresholds = len(filter_thresholds)
-
         indeces_perm = torch.randperm(num_examples_train) if cfg.SHUFFLE_BATCHES else range(num_examples_train)
         for count, i in enumerate(indeces_perm):
             x = filtered_x_train[i, :].to(device)
@@ -154,7 +152,7 @@ def main(cfg: DictConfig):
         avg_train_time_per_example = train_time / num_examples_train
 
         val_start = timer()
-        correct_count_val = validation(model, device, num_examples_val, filtered_x_test, t_test[:num_examples_val], n_filter_thresholds)
+        correct_count_val = validation(model, device, num_examples_val, filtered_x_test, t_test[:num_examples_val])
         val_end = timer()
 
         val_time = val_end - val_start

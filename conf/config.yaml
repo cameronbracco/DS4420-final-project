@@ -23,6 +23,9 @@ PRUNE_WEIGHT: -5
 LOG_LEVEL: ERROR
 DEVICE: auto
 RANDOM_SEED: 42
-WANDB_TAGS: testing,hello_world
+WANDB_TAGS:
+  testing
+  single_quant
+  non_float
 WANDB_MODE: online
 UPDATE_PBAR_EVEY_N_SAMPLES: 200

@@ -25,15 +25,19 @@ class BetterSONN:
 
         self.input_size = input_size  # aka number of receptors
         self.output_size = output_size  # aka number of columns
+
         self.num_neurons_per_column = num_neurons_per_column
         self.num_connections_per_neuron = num_connections_per_neuron
 
         self.spike_threshold = spike_threshold
         self.max_update_threshold = max_update_threshold  # Not used right now
+
         self.positive_reinforce_amount = positive_reinforce_amount
         self.negative_reinforce_amount = negative_reinforce_amount
+
         self.decay_amount = decay_amount
         self.prune_weight = prune_weight
+
         self.initial_connection_weight: int = initial_connection_weight
         self.initial_connection_weight_delta: Tuple[int] = initial_connection_weight_delta
 
@@ -57,11 +61,8 @@ class BetterSONN:
         )
 
         # Initialize the positive and negative quantilizers for each column
-        self.positive_quantilizers = []
-        self.negative_quantilizers = []
-        for i in range(output_size):
-            self.positive_quantilizers.append(Quantilizer(19, 1))
-            self.negative_quantilizers.append(Quantilizer(150, 1))
+        self.positive_quantilizer = Quantilizer(19, 1)
+        self.negative_quantilizer = Quantilizer(150, 1)
 
     def learn(self, x, y_true):
         # First, get the model's prediction
@@ -78,12 +79,9 @@ class BetterSONN:
         false_column_spikes = torch.cat((spike_counts[0:y_true], spike_counts[y_true + 1:]))
         max_false_spike = torch.amax(false_column_spikes)
 
-        # start_time = timer()
-
         # Learn true (if necessary)
         delta_true = spike_counts[y_true] - max_false_spike
-        if self.positive_quantilizers[y_true].check(delta_true):
-            # print("positively reinforcing:", y_true)
+        if self.positive_quantilizer.check(delta_true):
             # Positively reinforce the weights of each neuron in true column
             positive_reinforcements.append(y_true)
             self.weight_arrays[y_true] += self.positive_reinforce_amount
@@ -93,7 +91,7 @@ class BetterSONN:
             # We only want "false" columns
             if i != y_true:
                 delta_false = spike_counts[i] - avg_spike_count
-                if self.negative_quantilizers[i].check(delta_false):
+                if self.negative_quantilizer.check(delta_false):
                     # Negatively reinforce the weights of each neuron in this false column
                     negative_reinforcements.append(i)
                     self.weight_arrays[i] -= self.negative_reinforce_amount

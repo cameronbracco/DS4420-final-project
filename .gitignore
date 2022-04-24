@@ -9,3 +9,5 @@ mnist.pkl
 outputs
 *ubyte
 *.gz
+
+cmake-build-debug
