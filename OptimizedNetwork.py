@@ -169,7 +169,7 @@ class BetterSONN:
         # loop_start = timer()
         for neuron_idx in neurons_to_update:
             # Identify all the open connections for this neuron (open is when it's 0) ALL ARE OPEN?
-            open_connections = torch.nonzero(self.connection_masks[neuron_idx[0], neuron_idx[1]] >= 0)
+            open_connections = torch.nonzero(self.connection_masks[neuron_idx[0], neuron_idx[1]] == 0)
             rand_indices = torch.randperm(open_connections.shape[0])
             num_to_update = self.num_connections_per_neuron - curr_connection_counts[neuron_idx[0], neuron_idx[1]]
             connections_grown += num_to_update
@@ -177,7 +177,7 @@ class BetterSONN:
             # Only select the first `num_to_update` indices to create connection
             for i in range(num_to_update):
                 connection_index = rand_indices[i]
-                self.connection_masks[neuron_idx[0], neuron_idx[1], connection_index] += 1
+                self.connection_masks[neuron_idx[0], neuron_idx[1], connection_index] = 1
                 self.weight_arrays[neuron_idx[0], neuron_idx[1], connection_index] = \
                     torch.randint(
                         self.initial_connection_weight - self.initial_connection_weight_delta[0],
