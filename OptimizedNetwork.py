@@ -64,7 +64,7 @@ class BetterSONN:
             (self.output_size, self.num_neurons_per_column, self.input_size),
             dtype=torch.int32,
             device=device
-        )
+        ).float()
 
         # Initialize the positive and negative quantilizers
 
@@ -183,7 +183,7 @@ class BetterSONN:
                         self.initial_connection_weight - self.initial_connection_weight_delta[0],
                         self.initial_connection_weight + self.initial_connection_weight_delta[1],
                         (1,)
-                    ).item()
+                    ).float().item()
 
     def decay(self):
         # All connections decay by the same amount over time
