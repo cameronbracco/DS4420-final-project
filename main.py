@@ -20,15 +20,15 @@ from OptimizedNetwork import BetterSONN
 
 @hydra.main(config_path="conf", config_name="config")
 def main(cfg: DictConfig):
-    LOG_LEVEL = logging._nameToLevel[cfg.LOG_LEVEL]
+    LOG_LEVEL = logging._nameToLevel[cfg.general.log_level]
 
-    os.environ["WANDB_MODE"] = cfg.WANDB_MODE
+    os.environ["WANDB_MODE"] = cfg.wandb.mode
 
     wandb.init(
         project="test-project",
         entity="dpis-disciples",
         config={k: v for k, v in cfg.items()},
-        tags=cfg.WANDB_TAGS.split()
+        tags=cfg.wandb.tags.split()
     )
 
     # Loading MNIST data
@@ -39,10 +39,10 @@ def main(cfg: DictConfig):
     x_test = torch.from_numpy(x_test)
     t_test = torch.from_numpy(t_test)
 
-    num_examples_train = cfg.NUM_EXAMPLES_TRAIN if cfg.NUM_EXAMPLES_TRAIN > 0 else len(x_train)
-    num_examples_val = cfg.NUM_EXAMPLES_VAL if cfg.NUM_EXAMPLES_VAL > 0 else len(x_test)
+    num_examples_train = cfg.training.num_examples_train if cfg.training.num_examples_train > 0 else len(x_train)
+    num_examples_val = cfg.training.num_examples_Val if cfg.training.num_examples_Val > 0 else len(x_test)
 
-    filter_thresholds = torch.Tensor([int(t) for t in cfg.FILTER_THRESHOLDS.split()])
+    filter_thresholds = torch.Tensor([int(t) for t in cfg.preprocessing.pixel_intensity_levels.split()])
 
     sampled_x_train = x_train[:num_examples_train]
     sampled_x_test = x_test[:num_examples_val]
@@ -50,12 +50,14 @@ def main(cfg: DictConfig):
     filtered_x_train = torch.where(sampled_x_train.unsqueeze(2) >= filter_thresholds, 1, 0)
     filtered_x_test = torch.where(sampled_x_test.unsqueeze(2) >= filter_thresholds, 1, 0)
 
-    initial_connection_weight = cfg.INITIAL_CONNECTION_WEIGHT if cfg.INITIAL_CONNECTION_WEIGHT \
-        else int(cfg.SPIKE_THRESHOLD / 10)
+    initial_connection_weight = cfg.network.initial_connection_weight.weight_value \
+        if cfg.network.initial_connection_weight.weight_value \
+        else int(cfg.network.spike_threshold / 10)
 
-    device = ('cuda' if torch.cuda.is_available() else 'cpu') if cfg.DEVICE == 'auto' else cfg.DEVICE
+    device = ('cuda' if torch.cuda.is_available() else 'cpu') if cfg.general.device == 'auto' else cfg.general.device
+    print("Using device:", device)
 
-    RANDOM_SEED = cfg.RANDOM_SEED
+    RANDOM_SEED = cfg.general.random_seed
 
     # Make sure to set the random seed (should propogate to all other imports of random)
     random.seed(RANDOM_SEED)
@@ -64,63 +66,63 @@ def main(cfg: DictConfig):
 
     # Initialize model for MNIST
     model = BetterSONN(
-        cfg.INPUT_SIZE,
-        cfg.OUTPUT_SIZE,
-        cfg.NUM_NEURONS_PER_COLUMN,
-        cfg.NUM_CONNECTIONS_PER_NEURON,
-        spike_threshold=cfg.SPIKE_THRESHOLD,
-        max_update_threshold=cfg.MAX_UPDATE_THRESHOLD,
+        cfg.network.input_size,
+        cfg.network.output_size,
+        cfg.network.num_neurons_per_column,
+        cfg.network.num_connections_per_column,
+        spike_threshold=cfg.network.spike_threshold,
+        max_update_threshold=cfg.network.max_update_threshold,
         initial_connection_weight=initial_connection_weight,
         initial_connection_weight_delta=(
-            cfg.INITIAL_CONNECTION_WEIGHT_DELTA_MIN,
-            cfg.INITIAL_CONNECTION_WEIGHT_DELTA_MAX
+            cfg.network.initial_connection_weight.delta_min,
+            cfg.network.initial_connection_weight.delta_max
         ),
-        positive_reinforce_amount=cfg.POSITIVE_REINFORCE_AMOUNT,
-        negative_reinforce_amount=cfg.NEGATIVE_REINFORCE_AMOUNT,
-        positive_quantilizer_inc_value=cfg.POSITIVE_QUANTILIZER_INC_VALUE,
-        positive_quantilizer_dec_value=cfg.POSITIVE_QUANTILIZER_DEC_VALUE,
-        positive_quantilizer_denom=cfg.POSITIVE_QUANTILIZER_DENOM,
-        negative_quantilizer_increment_value=cfg.NEGATIVE_QUANTILIZER_INC_VALUE,
-        negative_quantilizer_decrement_value=cfg.NEGATIVE_QUANTILIZER_DEC_VALUE,
-        negative_quantilizer_denom=cfg.NEGATIVE_QUANTILIZER_DENOM,
-        decay_amount=cfg.DECAY_AMOUNT,
-        prune_weight=cfg.PRUNE_WEIGHT,
+        positive_reinforce_amount=cfg.network.positive_reinforce_amount,
+        negative_reinforce_amount=cfg.network.negative_reinforce_amount,
+        positive_quantilizer_inc_value=cfg.network.positive_quantilizer.inc_value,
+        positive_quantilizer_dec_value=cfg.network.positive_quantilizer.dec_value,
+        positive_quantilizer_denom=cfg.network.positive_quantilizer.denom,
+        negative_quantilizer_increment_value=cfg.network.negative_quantilizer.inc_value,
+        negative_quantilizer_decrement_value=cfg.network.negative_quantilizer.dec_value,
+        negative_quantilizer_denom=cfg.network.negative_quantilizer.denom,
+        decay_amount=cfg.network.decay_amount,
+        prune_weight=cfg.network.prune_weight,
         device=device
     )
 
     wandb.config = {
-        "epochs": cfg.NUM_EPOCHS,
+        "epochs": cfg.training.num_epochs,
         "num_examples_train": num_examples_train,
         "num_examples_val": num_examples_val,
-        "input_size": cfg.INPUT_SIZE,
-        "output_size": cfg.OUTPUT_SIZE,
-        "num_neurons_per_column": cfg.NUM_NEURONS_PER_COLUMN,
-        "num_connections_per_neuron": cfg.NUM_CONNECTIONS_PER_NEURON,
-        "spike_threshold": cfg.SPIKE_THRESHOLD,
-        "max_update_threshold": cfg.MAX_UPDATE_THRESHOLD,
+        "input_size": cfg.network.input_size,
+        "output_size": cfg.network.output_size,
+        "num_neurons_per_column": cfg.network.num_neurons_per_column,
+        "num_connections_per_neuron": cfg.network.num_connections_per_column,
+        "spike_threshold": cfg.network.spike_threshold,
+        "max_update_threshold": cfg.network.max_update_threshold,
         "initial_connection_weight": initial_connection_weight,
-        "initial_connection_weight_delta_min": cfg.INITIAL_CONNECTION_WEIGHT_DELTA_MIN,
-        "initial_connection_weight_delta_max": cfg.INITIAL_CONNECTION_WEIGHT_DELTA_MAX,
-        "positive_reinforce_amount": cfg.POSITIVE_REINFORCE_AMOUNT,
-        "negative_reinforce_amount": cfg.NEGATIVE_REINFORCE_AMOUNT,
-        "positive_quantilizer_inc_value": cfg.POSITIVE_QUANTILIZER_INC_VALUE,
-        "positive_quantilizer_dec_value": cfg.POSITIVE_QUANTILIZER_DEC_VALUE,
-        "positive_quantilizer_denom": cfg.POSITIVE_QUANTILIZER_DENOM,
-        "negative_quantilizer_inc_value": cfg.NEGATIVE_QUANTILIZER_INC_VALUE,
-        "negative_quantilizer_dec_value": cfg.NEGATIVE_QUANTILIZER_DEC_VALUE,
-        "negative_quantilizer_denom": cfg.NEGATIVE_QUANTILIZER_DENOM,
-        "decay_amount": cfg.DECAY_AMOUNT,
-        "prune_weight": cfg.PRUNE_WEIGHT,
-        "pixel_filter_thresholds": cfg.FILTER_THRESHOLDS,
-        "shuffle_batches": cfg.SHUFFLE_BATCHES,
+        "initial_connection_weight_delta_min": cfg.network.initial_connection_weight.delta_min,
+        "initial_connection_weight_delta_max": cfg.network.initial_connection_weight.delta_max,
+        "positive_reinforce_amount": cfg.network.positive_reinforce_amount,
+        "negative_reinforce_amount": cfg.network.negative_reinforce_amount,
+        "positive_quantilizer_inc_value": cfg.network.positive_quantilizer.inc_value,
+        "positive_quantilizer_dec_value": cfg.network.positive_quantilizer.dec_value,
+        "positive_quantilizer_denom": cfg.network.positive_quantilizer.denom,
+        "negative_quantilizer_inc_value": cfg.network.negative_quantilizer.inc_value,
+        "negative_quantilizer_dec_value": cfg.network.negative_quantilizer.dec_value,
+        "negative_quantilizer_denom": cfg.network.negative_quantilizer.denom,
+        "decay_amount": cfg.network.decay_amount,
+        "prune_weight": cfg.network.prune_weight,
+        "pixel_filter_levels": cfg.preprocessing.pixel_intensity_levels,
+        "shuffle_batches": cfg.training.shuffle_batches,
         "device": device
     }
 
     train_accuracy, avg_train_time_per_example, val_accuracy, avg_val_time_per_example = 0, 0, 0, 0
 
-    update_pbar_every_n = num_examples_train / cfg.UPDATE_PBAR_N_TIMES_PER_EPOCH
+    update_pbar_every_n = num_examples_train / cfg.general.update_pbar_n_times_per_epoch
 
-    for epoch in (epoch_pbar := tqdm(range(cfg.NUM_EPOCHS), position=0, leave=True)):
+    for epoch in (epoch_pbar := tqdm(range(cfg.training.num_epochs), position=0, leave=True)):
 
         correct_count_train = 0
         train_start = timer()
@@ -131,8 +133,8 @@ def main(cfg: DictConfig):
         y_trues = [0] * 10
         correct_count_train_per_class = [0] * 10
 
-        indeces_perm = torch.randperm(num_examples_train) if cfg.SHUFFLE_BATCHES else range(num_examples_train)
-        for count, i in enumerate(indeces_perm):
+        indexes_perm = torch.randperm(num_examples_train) if cfg.training.shuffle_batches else range(num_examples_train)
+        for count, i in enumerate(indexes_perm):
             x = filtered_x_train[i, :].to(device)
             y = t_train[i].item()
 
@@ -150,7 +152,7 @@ def main(cfg: DictConfig):
 
             if (count + 1) % update_pbar_every_n == 0:
                 epoch_pbar.set_description(
-                    f"Epoch {str(epoch).zfill(len(str(cfg.NUM_EPOCHS)))} "
+                    f"Epoch {str(epoch).zfill(len(str(cfg.training.num_epochs)))} "
                     f"({str(count + 1).zfill(len(str(num_examples_train)))}/{num_examples_train}) - "
                     f"train acc: {train_accuracy:.5f} - "
                     f"avg train time: {avg_train_time_per_example:.5f} - "
@@ -176,7 +178,7 @@ def main(cfg: DictConfig):
         val_accuracy = correct_count_val / num_examples_val
 
         epoch_pbar.set_description(
-            f"Epoch {str(epoch).zfill(len(str(cfg.NUM_EPOCHS)))} {0}/{num_examples_train} "
+            f"Epoch {str(epoch).zfill(len(str(cfg.training.num_epochs)))} {0}/{num_examples_train} "
             f"({str(0).zfill(len(str(num_examples_train)))}/{num_examples_train}) - "
             f"train acc: {train_accuracy:.5f} - "
             f"avg train time: {avg_train_time_per_example:.5f} - "

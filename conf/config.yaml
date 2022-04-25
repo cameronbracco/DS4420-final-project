@@ -1,37 +1,45 @@
-NUM_EXAMPLES_TRAIN: 100 # use -1 for all
-NUM_EXAMPLES_VAL: 100 # use -1 for all
-NUM_EPOCHS: 100
-INPUT_SIZE: 784
-OUTPUT_SIZE: 10
-NUM_NEURONS_PER_COLUMN: 200
-NUM_CONNECTIONS_PER_NEURON: 10
-SPIKE_THRESHOLD: 1000000
-MAX_UPDATE_THRESHOLD: 3000  # not used right now
-INITIAL_CONNECTION_WEIGHT: False
-INITIAL_CONNECTION_WEIGHT_DELTA_MIN: 0
-INITIAL_CONNECTION_WEIGHT_DELTA_MAX: 1
-POSITIVE_REINFORCE_AMOUNT: 100
-NEGATIVE_REINFORCE_AMOUNT: 5
-POSITIVE_QUANTILIZER_INC_VALUE: 19
-POSITIVE_QUANTILIZER_DEC_VALUE: 1
-POSITIVE_QUANTILIZER_DENOM: 100
-NEGATIVE_QUANTILIZER_INC_VALUE: 150
-NEGATIVE_QUANTILIZER_DEC_VALUE: 1
-NEGATIVE_QUANTILIZER_DENOM: 900
-DECAY_AMOUNT: 0 # For now...
-PRUNE_WEIGHT: -5
-FILTER_THRESHOLDS:
-  1
-  64
-  128
-  192
-SHUFFLE_BATCHES: True
-LOG_LEVEL: ERROR
-DEVICE: auto
-RANDOM_SEED: 42
-WANDB_TAGS:
-  testing
-  single_quant
-  float
-WANDB_MODE: online
-UPDATE_PBAR_N_TIMES_PER_EPOCH: 10
+training:
+  num_examples_train: -1 # use -1 for all
+  num_examples_Val: -1 # use -1 for all
+  num_epochs: 100
+  shuffle_batches: True
+network:
+  input_size: 784
+  output_size: 10
+  num_neurons_per_column: 200
+  num_connections_per_column: 10
+  spike_threshold: 1000000
+  max_update_threshold: 3000  # not used right now
+  initial_connection_weight:
+    weight_value: False
+    delta_min: 0
+    delta_max: 1
+  positive_reinforce_amount: 100
+  negative_reinforce_amount: 5
+  positive_quantilizer:
+    inc_value: 19
+    dec_value: 1
+    denom: 100
+  negative_quantilizer:
+    inc_value: 150
+    dec_value: 1
+    denom: 900
+  decay_amount: 0 # For now...
+  prune_weight: -5
+preprocessing:
+  pixel_intensity_levels:
+    1
+    64
+    128
+    192
+general:
+  log_level: ERROR
+  update_pbar_n_times_per_epoch: 100
+  device: auto
+  random_seed: 42
+wandb:
+  tags:
+    testing
+    single_quant
+    float
+  mode: online
