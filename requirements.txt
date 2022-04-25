@@ -5,3 +5,5 @@ tqdm
 torch
 hydra-core
 omegaconf
+pytorch-lightning
+torchmetrics
