@@ -1,18 +1,22 @@
+from typing import Union, List
+
 import hydra
 from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.utilities.types import STEP_OUTPUT
-from torch import nn
+from pytorch_lightning.utilities.types import STEP_OUTPUT, EPOCH_OUTPUT
+from torch import nn, stack
 from omegaconf import DictConfig
-from torch.nn.functional import cross_entropy, one_hot
+from torch.nn.functional import one_hot
 from torch.optim import Adam
 from torchmetrics import Accuracy
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 from mnist_datamodule import MNISTDataModule
 
 
 class SimpleFFN(LightningModule):
+
     def __init__(self, input_size, hidden_sizes, output_size, learning_rate=1e-3):
         super().__init__()
         self.save_hyperparameters(ignore="model")
@@ -52,7 +56,14 @@ class SimpleFFN(LightningModule):
 
         self.log("train_loss", loss, prog_bar=True)
         self.log("train_acc", self.acc, prog_bar=True)
-        return loss
+        return {
+            "loss": loss,
+            "preds": y_hat.argmax(dim=1),
+            "labels": y,
+        }
+
+    def training_epoch_end(self, outputs: EPOCH_OUTPUT) -> None:
+        return self._epoch_end_logging(outputs, 'train')
 
     def validation_step(self, batch, batch_idx) -> STEP_OUTPUT:
         x, y = batch
@@ -61,8 +72,42 @@ class SimpleFFN(LightningModule):
         loss = self.loss_module(y_hat, one_hot(y, num_classes=self.output_size).float())
         self.acc(y_hat.argmax(dim=1), y)
 
-        self.log("val_loss", loss, prog_bar=True)
-        self.log("val_acc", self.acc, prog_bar=True)
+        # self.log("val_loss", loss, prog_bar=True)
+        # self.log("val_acc", self.acc, prog_bar=True)
+        return {
+            "loss": loss,
+            "labels": y,
+            "preds": y_hat.argmax(dim=1),
+        }
+
+    def validation_epoch_end(self, outputs: Union[EPOCH_OUTPUT, List[EPOCH_OUTPUT]]) -> None:
+        return self._epoch_end_logging(outputs, 'val')
+
+    def _epoch_end_logging(self, outputs: Union[EPOCH_OUTPUT, List[EPOCH_OUTPUT]], prefix: str) -> None:
+        avg_loss = stack([x["loss"] for x in outputs]).mean()
+        self.log(f"{prefix}_loss", avg_loss)
+
+        preds = stack([x["preds"] for x in outputs]).flatten().cpu().numpy()
+        labels = stack([x["labels"] for x in outputs]).flatten().cpu().numpy()
+
+        accuracy = accuracy_score(labels, preds)
+        precision = precision_score(labels, preds, average="macro")
+        recall = recall_score(labels, preds, average="macro")
+        f1 = f1_score(labels, preds, average="macro")
+
+        self.log(f"{prefix}_accuracy", accuracy)
+        self.log(f"{prefix}_precision", precision)
+        self.log(f"{prefix}_recall", recall)
+        self.log(f"{prefix}_f1", f1)
+
+        digit_precision = precision_score(labels, preds, average=None)
+        digit_recall = recall_score(labels, preds, average=None)
+        digit_f1 = f1_score(labels, preds, average=None)
+
+        for i in range(10):
+            self.log(f"{prefix}_precision/{i}", digit_precision[i])
+            self.log(f"{prefix}_recall/{i}", digit_recall[i])
+            self.log(f"{prefix}_f1/{i}", digit_f1[i])
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=self.learning_rate)
@@ -72,7 +117,8 @@ class SimpleFFN(LightningModule):
 def main(cfg: DictConfig):
 
     wandb_logger = WandbLogger(
-        "simple_ffn"
+        entity="dpis-disciples",
+        project='ml2-project-ffn'
     )
 
     model = SimpleFFN(
@@ -90,7 +136,8 @@ def main(cfg: DictConfig):
     trainer = Trainer(
         callbacks=[checkpoint_callback],
         auto_lr_find=True,
-        accelerator='gpu',
+        accelerator='gpu',  # 'gpu',
+        devices=[0],
         max_epochs=100,
         logger=wandb_logger
     )

@@ -7,3 +7,5 @@ hydra-core
 omegaconf
 pytorch-lightning
 torchmetrics
+sklearn
+torchvision
