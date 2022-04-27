@@ -3,6 +3,7 @@ training:
   num_examples_Val: 1000 # use -1 for all
   num_epochs: 100
   shuffle_batches: True
+  must_learn_every_n_iters: 100
 network:
   input_size: 784
   output_size: 10

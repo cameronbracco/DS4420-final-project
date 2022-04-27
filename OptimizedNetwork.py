@@ -84,61 +84,62 @@ class BetterSONN:
             self.negative_quantilizer_decrement_value / self.negative_quantilizer_denom
         )
 
-    def learn(self, x, y_true):
-        # First, get the model's prediction
-        y_hat, spike_counts = self.forward(x)
-
-        # Book keeping what we're learning
-        positive_reinforcements = []
-        negative_reinforcements = []
+    def quantilize(self, col_spike_counts, y_true):
+        # Bookkeeping what we're learning
+        positive_reinforcements, negative_reinforcements = [], []
+        should_learn = False
 
         # Isolate just the false columns and find the maximum spike count
-        false_column_spikes = torch.cat((spike_counts[0:y_true], spike_counts[y_true + 1:]))
+        false_column_spikes = torch.cat((col_spike_counts[0:y_true], col_spike_counts[y_true + 1:]))
         max_false_spike = torch.amax(false_column_spikes)
 
         # Learn true (if necessary)
-        delta_true = max_false_spike - spike_counts[y_true]
+        delta_true = max_false_spike - col_spike_counts[y_true]
         if self.positive_quantilizer.check(delta_true):
+            should_learn = True
             # Positively reinforce the weights of each neuron in true column
             positive_reinforcements.append(y_true)
             self.weight_arrays[y_true] += self.positive_reinforce_amount
 
         # Learn false (if necessary)
         # Calculate the average spike count (used for false learning)
-        total_spike_counts = torch.sum(spike_counts, dim=0)
-        avg_spike_count_except_col = (total_spike_counts - spike_counts) / spike_counts.shape[0]
+        total_spike_counts = torch.sum(col_spike_counts, dim=0)
+        avg_spike_count_except_col = (total_spike_counts - col_spike_counts) / col_spike_counts.shape[0]
         for i in range(self.output_size):
             # We only want "false" columns
             if i != y_true:
-                delta_false = spike_counts[i] - avg_spike_count_except_col[i]
+                delta_false = col_spike_counts[i] - avg_spike_count_except_col[i]
                 if self.negative_quantilizer.check(delta_false):
                     # Negatively reinforce the weights of each neuron in this false column
                     negative_reinforcements.append(i)
                     self.weight_arrays[i] -= self.negative_reinforce_amount
 
-        # end_time = timer()
-        # delta_time = end_time - start_time
-        # print("QUANTILIZERS TIME:", delta_time)
-
-        return y_hat, spike_counts, positive_reinforcements, negative_reinforcements
+        return should_learn, positive_reinforcements, negative_reinforcements
 
     def forward(self, x):
-        # ------ Grow connections ------
-        self.grow()
-
         # ------ Count spikes ------
-        col_spike_counts = self.count_spikes(x)
+        return self.count_spikes(x)
+
+    def fit(self, x, x_raw, y_true, override_should_learn=False):  # change this to training only
+        col_spike_counts = self.forward(x)
 
         # ------ Select prediction ------
-        prediction_idx = torch.argmax(col_spike_counts).item()
+        y_hat = torch.argmax(col_spike_counts).item()
 
-        # ------ Decay all connections ------
-        self.decay()
+        should_learn, positive_reinforcements, negative_reinforcements = \
+            self.quantilize(col_spike_counts, y_true)
 
-        # ------ Prune bad connections ------
-        self.prune()
+        if should_learn or override_should_learn:
+            # ------ Grow connections ------
+            self.grow(x_raw)
 
-        return prediction_idx, col_spike_counts
+            # ------ Decay all connections ------
+            self.decay()
+
+            # ------ Prune bad connections ------
+            self.prune()
+
+        return y_hat, col_spike_counts, positive_reinforcements, negative_reinforcements
 
     def count_spikes(self, x):
 
@@ -153,7 +154,7 @@ class BetterSONN:
 
         return col_spike_counts
 
-    def grow(self):
+    def grow(self, x):
         # We grow connections by adding ones to the connection mask where we want them
         # Notably, we need to make sure it's a _new_ connection (in the current setup)
 
@@ -167,18 +168,23 @@ class BetterSONN:
         connections_grown = 0
 
         # loop_start = timer()
-        for neuron_idx in neurons_to_update:
+        for column_idx, neuron_idx, receptor_idx in neurons_to_update:
             # Identify all the open connections for this neuron (open is when it's 0) ALL ARE OPEN?
-            open_connections = torch.nonzero(self.connection_masks[neuron_idx[0], neuron_idx[1]] == 0)
+            open_connections = torch.nonzero(
+                torch.logical_and(
+                    self.connection_masks[column_idx, neuron_idx] == 0,
+                    x > 0
+                )
+            )
             rand_indices = torch.randperm(open_connections.shape[0])
-            num_to_update = self.num_connections_per_neuron - curr_connection_counts[neuron_idx[0], neuron_idx[1]]
+            num_to_update = self.num_connections_per_neuron - curr_connection_counts[column_idx, neuron_idx]
             connections_grown += num_to_update
 
             # Only select the first `num_to_update` indices to create connection
             for i in range(num_to_update):
                 connection_index = rand_indices[i]
-                self.connection_masks[neuron_idx[0], neuron_idx[1], connection_index] = 1
-                self.weight_arrays[neuron_idx[0], neuron_idx[1], connection_index] = \
+                self.connection_masks[column_idx, neuron_idx, connection_index] = 1
+                self.weight_arrays[column_idx, neuron_idx, connection_index] = \
                     torch.randint(
                         self.initial_connection_weight - self.initial_connection_weight_delta[0],
                         self.initial_connection_weight + self.initial_connection_weight_delta[1],

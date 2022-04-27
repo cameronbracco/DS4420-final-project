@@ -115,6 +115,7 @@ def main(cfg: DictConfig):
         "prune_weight": cfg.network.prune_weight,
         "pixel_filter_levels": cfg.preprocessing.pixel_intensity_levels,
         "shuffle_batches": cfg.training.shuffle_batches,
+        "must_learn_every_n_iters": cfg.training.must_learn_every_n_iters,
         "device": device
     }
 
@@ -135,10 +136,15 @@ def main(cfg: DictConfig):
 
         indexes_perm = torch.randperm(num_examples_train) if cfg.training.shuffle_batches else range(num_examples_train)
         for count, i in enumerate(indexes_perm):
+            x_raw = sampled_x_train[i, :].to(device)
             x = filtered_x_train[i, :].to(device)
             y = t_train[i].item()
 
-            pred, spikes, pos_reinforcements, neg_reinforcements = model.learn(x, y)
+            override_should_learn = (count % cfg.training.must_learn_every_n_iters) == 0
+            pred, spikes, pos_reinforcements, neg_reinforcements = model.fit(
+                x, x_raw, y,
+                override_should_learn=override_should_learn
+            )
 
             num_pos_reinforces += len(pos_reinforcements)
             num_neg_reinforces += len(neg_reinforcements)
