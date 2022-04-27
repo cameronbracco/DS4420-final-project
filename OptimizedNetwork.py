@@ -92,25 +92,25 @@ class BetterSONN:
         positive_reinforcements = []
         negative_reinforcements = []
 
-        # Calculate the average spike count (used for false learning)
-        avg_spike_count = int(torch.sum(spike_counts) / spike_counts.shape[0])
-
         # Isolate just the false columns and find the maximum spike count
         false_column_spikes = torch.cat((spike_counts[0:y_true], spike_counts[y_true + 1:]))
         max_false_spike = torch.amax(false_column_spikes)
 
         # Learn true (if necessary)
-        delta_true = spike_counts[y_true] - max_false_spike
+        delta_true = max_false_spike - spike_counts[y_true]
         if self.positive_quantilizer.check(delta_true):
             # Positively reinforce the weights of each neuron in true column
             positive_reinforcements.append(y_true)
             self.weight_arrays[y_true] += self.positive_reinforce_amount
 
         # Learn false (if necessary)
+        # Calculate the average spike count (used for false learning)
+        total_spike_counts = torch.sum(spike_counts, dim=0)
+        avg_spike_count_except_col = (total_spike_counts - spike_counts) / spike_counts.shape[0]
         for i in range(self.output_size):
             # We only want "false" columns
             if i != y_true:
-                delta_false = spike_counts[i] - avg_spike_count
+                delta_false = spike_counts[i] - avg_spike_count_except_col[i]
                 if self.negative_quantilizer.check(delta_false):
                     # Negatively reinforce the weights of each neuron in this false column
                     negative_reinforcements.append(i)
