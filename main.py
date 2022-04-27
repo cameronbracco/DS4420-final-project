@@ -10,11 +10,10 @@ import random
 import numpy as np
 import wandb
 import torch
-from tqdm.auto import tqdm, trange
+from tqdm.auto import tqdm
 from timeit import default_timer as timer
 
-from utils import render, validation
-from Network import SONN
+from utils import validation
 from OptimizedNetwork import BetterSONN
 
 
@@ -54,7 +53,9 @@ def main(cfg: DictConfig):
         if cfg.network.initial_connection_weight.weight_value \
         else int(cfg.network.spike_threshold / 10)
 
-    device = ('cuda' if torch.cuda.is_available() else 'cpu') if cfg.general.device == 'auto' else cfg.general.device
+    device = ('cuda' if torch.cuda.is_available() else 'cpu') \
+        if cfg.general.device == 'auto' \
+        else cfg.general.device
     print("Using device:", device)
 
     RANDOM_SEED = cfg.general.random_seed
