@@ -72,7 +72,9 @@ def main(cfg: DictConfig):
         cfg.network.num_neurons_per_column,
         cfg.network.num_connections_per_column,
         spike_threshold=cfg.network.spike_threshold,
-        max_update_threshold=cfg.network.max_update_threshold,
+        max_connection_weight=cfg.network.max_connection_weight,
+        min_overall_neuron_update_threshold=cfg.network.min_overall_neuron_update_threshold,
+        max_overall_neuron_update_threshold=cfg.network.max_overall_neuron_update_threshold,
         initial_connection_weight=initial_connection_weight,
         initial_connection_weight_delta=(
             cfg.network.initial_connection_weight.delta_min,
@@ -89,6 +91,7 @@ def main(cfg: DictConfig):
         decay_amount=cfg.network.decay_amount,
         prune_weight=cfg.network.prune_weight,
         max_neurons_to_grow_from_on_sample=cfg.network.max_neurons_to_grow_from_on_sample,
+        decay_prune_every_n_samples=cfg.network.decay_prune_every_n_samples,
         device=device
     )
 
@@ -101,7 +104,9 @@ def main(cfg: DictConfig):
         "num_neurons_per_column": cfg.network.num_neurons_per_column,
         "num_connections_per_neuron": cfg.network.num_connections_per_column,
         "spike_threshold": cfg.network.spike_threshold,
-        "max_update_threshold": cfg.network.max_update_threshold,
+        "max_connection_weight": cfg.network.max_connection_weight,
+        "min_overall_neuron_update_threshold": cfg.network.min_overall_neuron_update_threshold,
+        "max_overall_neuron_update_threshold": cfg.network.max_overall_neuron_update_threshold,
         "initial_connection_weight": initial_connection_weight,
         "initial_connection_weight_delta_min": cfg.network.initial_connection_weight.delta_min,
         "initial_connection_weight_delta_max": cfg.network.initial_connection_weight.delta_max,
@@ -129,7 +134,6 @@ def main(cfg: DictConfig):
 
         correct_count_train = 0
         train_start = timer()
-        num_pos_reinforces, num_neg_reinforces = 0, 0
         connections_grown, connections_pruned = 0, 0
         predictions = [0] * 10
         y_trues = [0] * 10
@@ -142,7 +146,7 @@ def main(cfg: DictConfig):
             y = t_train[i].item()
 
             override_should_learn = (count % cfg.training.must_learn_every_n_iters) == 0
-            pred, spikes, pos_reinforcements, neg_reinforcements, n_grown, n_pruned = model.fit(
+            pred, spikes, n_grown, n_pruned = model.fit(
                 x, x_raw, y,
                 override_should_learn=override_should_learn
             )
@@ -150,8 +154,6 @@ def main(cfg: DictConfig):
             connections_grown += n_grown
             connections_pruned += n_pruned
 
-            num_pos_reinforces += len(pos_reinforcements)
-            num_neg_reinforces += len(neg_reinforcements)
             predictions[pred] += 1
             y_trues[y] += 1
 
@@ -168,7 +170,6 @@ def main(cfg: DictConfig):
                     f"avg train time: {avg_train_time_per_example:.5f} - "
                     f"val acc: {val_accuracy:.5f} - "
                     f"avg val time: {avg_val_time_per_example:.5f} - "
-                    f"reinforcements: +{num_pos_reinforces}/-{num_neg_reinforces} - "
                     f"connections grown: {connections_grown} - "
                     f"connections pruned: {connections_pruned} - "
                     f"predictions: [{', '.join([str(p) + '/' + str(t)  for p, t in zip(predictions, y_trues)])}]"
@@ -196,7 +197,6 @@ def main(cfg: DictConfig):
             f"avg train time: {avg_train_time_per_example:.5f} - "
             f"val acc: {val_accuracy:.5f} - "
             f"avg val time: {avg_val_time_per_example:.5f} - "
-            f"reinforcements: +{num_pos_reinforces}/-{num_neg_reinforces} - "
             f"connections grown: {connections_grown} - "
             f"connections pruned: {connections_pruned} - "
             f"predictions: [{', '.join([str(p) + '/' + str(t)  for p, t in zip(predictions, y_trues)])}]"
@@ -211,8 +211,6 @@ def main(cfg: DictConfig):
             "val_accuracy": correct_count_val / num_examples_val,
             "train_time": train_time,
             "val_time": val_time,
-            "positive_reinforces": num_pos_reinforces,
-            "negative_reinforces": num_neg_reinforces,
             "connections_grown": connections_grown,
             "connections_pruned": connections_pruned,
             **{

@@ -1,22 +1,24 @@
 training:
-  num_examples_train: 100 # use -1 for all
-  num_examples_val: 100 # use -1 for all
+  num_examples_train: 1000 # use -1 for all
+  num_examples_val: 1000 # use -1 for all
   num_epochs: 100
   shuffle_batches: True
   must_learn_every_n_iters: 1
 network:
   input_size: 784
   output_size: 10
-  num_neurons_per_column: 1024
+  num_neurons_per_column: 792
   num_connections_per_column: 10
   spike_threshold: 1000000
-  max_update_threshold: 3000  # not used right now
+  max_connection_weight: 1000000
+  min_overall_neuron_update_threshold: 300000
+  max_overall_neuron_update_threshold: 1200000
   initial_connection_weight:
     weight_value: False
     delta_min: 0
     delta_max: 1
-  positive_reinforce_amount: 0.2
-  negative_reinforce_amount: 0.2
+  positive_reinforce_amount: 500
+  negative_reinforce_amount: -500
   positive_quantilizer:
     inc_value: 19
     dec_value: 1
@@ -25,9 +27,10 @@ network:
     inc_value: 150
     dec_value: 1
     denom: 900
-  decay_amount: 0 # For now...
-  prune_weight: 99995
+  decay_amount: 20
+  prune_weight: 97000
   max_neurons_to_grow_from_on_sample: 10
+  decay_prune_every_n_samples: 100
 preprocessing:
   pixel_intensity_levels:
     1
