@@ -1,9 +1,9 @@
 training:
-  num_examples_train: 1000 # use -1 for all
-  num_examples_Val: 1000 # use -1 for all
+  num_examples_train: 100 # use -1 for all
+  num_examples_val: 100 # use -1 for all
   num_epochs: 100
   shuffle_batches: True
-  must_learn_every_n_iters: 100
+  must_learn_every_n_iters: 1
 network:
   input_size: 784
   output_size: 10
@@ -26,7 +26,8 @@ network:
     dec_value: 1
     denom: 900
   decay_amount: 0 # For now...
-  prune_weight: -5
+  prune_weight: 99995
+  max_neurons_to_grow_from_on_sample: 10
 preprocessing:
   pixel_intensity_levels:
     1
@@ -35,7 +36,7 @@ preprocessing:
     192
 general:
   log_level: ERROR
-  update_pbar_n_times_per_epoch: 100
+  update_pbar_n_times_per_epoch: 10
   device: auto
   random_seed: 42
 wandb:

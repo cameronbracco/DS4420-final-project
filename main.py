@@ -39,7 +39,7 @@ def main(cfg: DictConfig):
     t_test = torch.from_numpy(t_test)
 
     num_examples_train = cfg.training.num_examples_train if cfg.training.num_examples_train > 0 else len(x_train)
-    num_examples_val = cfg.training.num_examples_Val if cfg.training.num_examples_Val > 0 else len(x_test)
+    num_examples_val = cfg.training.num_examples_val if cfg.training.num_examples_val > 0 else len(x_test)
 
     filter_thresholds = torch.Tensor([int(t) for t in cfg.preprocessing.pixel_intensity_levels.split()])
 
@@ -88,6 +88,7 @@ def main(cfg: DictConfig):
         negative_quantilizer_denom=cfg.network.negative_quantilizer.denom,
         decay_amount=cfg.network.decay_amount,
         prune_weight=cfg.network.prune_weight,
+        max_neurons_to_grow_from_on_sample=cfg.network.max_neurons_to_grow_from_on_sample,
         device=device
     )
 
@@ -128,9 +129,8 @@ def main(cfg: DictConfig):
 
         correct_count_train = 0
         train_start = timer()
-        num_pos_reinforces = 0
-        num_neg_reinforces = 0
-        connections_grown = 0
+        num_pos_reinforces, num_neg_reinforces = 0, 0
+        connections_grown, connections_pruned = 0, 0
         predictions = [0] * 10
         y_trues = [0] * 10
         correct_count_train_per_class = [0] * 10
@@ -142,10 +142,13 @@ def main(cfg: DictConfig):
             y = t_train[i].item()
 
             override_should_learn = (count % cfg.training.must_learn_every_n_iters) == 0
-            pred, spikes, pos_reinforcements, neg_reinforcements = model.fit(
+            pred, spikes, pos_reinforcements, neg_reinforcements, n_grown, n_pruned = model.fit(
                 x, x_raw, y,
                 override_should_learn=override_should_learn
             )
+
+            connections_grown += n_grown
+            connections_pruned += n_pruned
 
             num_pos_reinforces += len(pos_reinforcements)
             num_neg_reinforces += len(neg_reinforcements)
@@ -166,6 +169,8 @@ def main(cfg: DictConfig):
                     f"val acc: {val_accuracy:.5f} - "
                     f"avg val time: {avg_val_time_per_example:.5f} - "
                     f"reinforcements: +{num_pos_reinforces}/-{num_neg_reinforces} - "
+                    f"connections grown: {connections_grown} - "
+                    f"connections pruned: {connections_pruned} - "
                     f"predictions: [{', '.join([str(p) + '/' + str(t)  for p, t in zip(predictions, y_trues)])}]"
                 )
 
@@ -192,6 +197,8 @@ def main(cfg: DictConfig):
             f"val acc: {val_accuracy:.5f} - "
             f"avg val time: {avg_val_time_per_example:.5f} - "
             f"reinforcements: +{num_pos_reinforces}/-{num_neg_reinforces} - "
+            f"connections grown: {connections_grown} - "
+            f"connections pruned: {connections_pruned} - "
             f"predictions: [{', '.join([str(p) + '/' + str(t)  for p, t in zip(predictions, y_trues)])}]"
         )
         if LOG_LEVEL == logging.DEBUG:
@@ -206,6 +213,8 @@ def main(cfg: DictConfig):
             "val_time": val_time,
             "positive_reinforces": num_pos_reinforces,
             "negative_reinforces": num_neg_reinforces,
+            "connections_grown": connections_grown,
+            "connections_pruned": connections_pruned,
             **{
                 f"training_pred_prop/{i}": predictions[i] / y_trues[i] if y_trues[i] > 0 else 0
                 for i in range(10)
@@ -217,7 +226,11 @@ def main(cfg: DictConfig):
             **{
                 f"training_pred_accuracy/{i}": correct_count_train_per_class[i] / y_trues[i] if y_trues[i] > 0 else 0
                 for i in range(10)
-            }
+            },
+            "model_weights/mean": model.get_weights_mean(),
+            "model_weights/std": model.get_weights_std(),
+            "model_weights/min": model.get_weights_min(),
+            "model_weights/max": model.get_weights_max(),
         })
 
 

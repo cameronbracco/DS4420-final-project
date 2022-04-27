@@ -26,6 +26,7 @@ class BetterSONN:
             negative_quantilizer_denom=900,
             decay_amount=0,
             prune_weight=-5,
+            max_neurons_to_grow_from_on_sample=1,
             device='cuda'
     ):
 
@@ -46,6 +47,8 @@ class BetterSONN:
 
         self.initial_connection_weight: int = initial_connection_weight
         self.initial_connection_weight_delta: Tuple[int] = initial_connection_weight_delta
+
+        self.max_neurons_to_grow_from_on_sample = max_neurons_to_grow_from_on_sample
 
         # Connection mask is [columns x neurons per column x input size]
         # Because right now we hard limit the number of connections to match the input size
@@ -120,6 +123,11 @@ class BetterSONN:
         # ------ Count spikes ------
         return self.count_spikes(x)
 
+    def predict(self, x):
+        col_spike_counts = self.forward(x)
+        y_hat = torch.argmax(col_spike_counts).item()
+        return y_hat
+
     def fit(self, x, x_raw, y_true, override_should_learn=False):  # change this to training only
         col_spike_counts = self.forward(x)
 
@@ -129,17 +137,18 @@ class BetterSONN:
         should_learn, positive_reinforcements, negative_reinforcements = \
             self.quantilize(col_spike_counts, y_true)
 
+        n_grown, n_pruned = 0, 0
         if should_learn or override_should_learn:
             # ------ Grow connections ------
-            self.grow(x_raw)
+            n_grown = self.grow(x_raw)
 
             # ------ Decay all connections ------
             self.decay()
 
             # ------ Prune bad connections ------
-            self.prune()
+            n_pruned = self.prune()
 
-        return y_hat, col_spike_counts, positive_reinforcements, negative_reinforcements
+        return y_hat, col_spike_counts, positive_reinforcements, negative_reinforcements, n_grown, n_pruned
 
     def count_spikes(self, x):
 
@@ -160,7 +169,7 @@ class BetterSONN:
 
         # Calculate the number of connections each neuron currently has ahead of time
         # Shape is [columns x neurons per column]
-        curr_connection_counts = torch.sum(self.connection_masks, axis=2)
+        curr_connection_counts = torch.sum(self.connection_masks, dim=2)
 
         # Identify which neurons need to be updated (those with non-full connections)
         # Produces a tensor w/ all the indices [column, neuron] for such neurons 
@@ -168,7 +177,9 @@ class BetterSONN:
         connections_grown = 0
 
         # loop_start = timer()
-        for column_idx, neuron_idx, receptor_idx in neurons_to_update:
+        neurons_to_update_idxs = torch.randperm(neurons_to_update.shape[0])[:self.max_neurons_to_grow_from_on_sample]
+        for idx in neurons_to_update_idxs:
+            column_idx, neuron_idx = neurons_to_update[idx]
             # Identify all the open connections for this neuron (open is when it's 0) ALL ARE OPEN?
             open_connections = torch.nonzero(
                 torch.logical_and(
@@ -177,19 +188,22 @@ class BetterSONN:
                 )
             )
             rand_indices = torch.randperm(open_connections.shape[0])
-            num_to_update = self.num_connections_per_neuron - curr_connection_counts[column_idx, neuron_idx]
+            num_to_update = min(
+                self.num_connections_per_neuron - curr_connection_counts[column_idx, neuron_idx],
+                rand_indices.shape[0]
+            )
             connections_grown += num_to_update
 
             # Only select the first `num_to_update` indices to create connection
-            for i in range(num_to_update):
-                connection_index = rand_indices[i]
-                self.connection_masks[column_idx, neuron_idx, connection_index] = 1
-                self.weight_arrays[column_idx, neuron_idx, connection_index] = \
-                    torch.randint(
-                        self.initial_connection_weight - self.initial_connection_weight_delta[0],
-                        self.initial_connection_weight + self.initial_connection_weight_delta[1],
-                        (1,)
-                    ).float().item()
+            self.connection_masks[column_idx, neuron_idx, rand_indices[:num_to_update]] = 1
+            self.weight_arrays[column_idx, neuron_idx, rand_indices[:num_to_update]] = \
+                torch.randint(
+                    self.initial_connection_weight - self.initial_connection_weight_delta[0],
+                    self.initial_connection_weight + self.initial_connection_weight_delta[1],
+                    (num_to_update,)
+                ).float()
+
+        return connections_grown
 
     def decay(self):
         # All connections decay by the same amount over time
@@ -199,6 +213,10 @@ class BetterSONN:
         # If a connection drops below a specific weight, prune it by clearing the mask
         # NOTE: We don't bother resetting the weight array here, since it will be reset
         #       if the connection is ever re-added
+        count_pruned = torch.logical_and(
+            torch.abs(self.weight_arrays) < self.prune_weight,
+            self.connection_masks == 1
+        ).sum()  #TODO: verify this works, seems to always be 0?
         self.connection_masks = torch.where(
             torch.logical_or(
                 torch.abs(self.weight_arrays) < self.prune_weight,
@@ -206,3 +224,16 @@ class BetterSONN:
             ),
             0, 1
         )
+        return count_pruned
+
+    def get_weights_mean(self):
+        return torch.mean(self.weight_arrays)
+
+    def get_weights_std(self):
+        return torch.std(self.weight_arrays)
+
+    def get_weights_min(self):
+        return torch.min(self.weight_arrays)
+
+    def get_weights_max(self):
+        return torch.max(self.weight_arrays)
