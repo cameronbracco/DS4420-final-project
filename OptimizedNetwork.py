@@ -200,6 +200,9 @@ class BetterSONN:
         # NOTE: We don't bother resetting the weight array here, since it will be reset
         #       if the connection is ever re-added
         self.connection_masks = torch.where(
-            torch.logical_or(self.weight_arrays < self.prune_weight, self.connection_masks == 0),
+            torch.logical_or(
+                torch.abs(self.weight_arrays) < self.prune_weight,
+                self.connection_masks == 0
+            ),
             0, 1
         )
