@@ -1,3 +1,4 @@
+from pickle import dump, load
 from typing import Tuple, List
 
 import torch
@@ -194,7 +195,7 @@ class BetterSONN:
             # ------ Prune bad connections ------
             n_pruned += self.prune()
 
-        return y_hat, col_spike_counts, n_grown, n_pruned
+        return y_hat, col_spike_counts, n_grown, n_pruned, should_learn
 
     def count_spikes(self, x):
 
@@ -276,8 +277,6 @@ class BetterSONN:
 
     def prune(self):
         # If a connection drops below a specific weight, prune it by clearing the mask
-        # NOTE: We don't bother resetting the weight array here, since it will be reset
-        #       if the connection is ever re-added
         count_pruned = torch.logical_and(
             torch.abs(self.weight_arrays) < self.prune_weight,
             self.connection_masks == 1
@@ -289,6 +288,9 @@ class BetterSONN:
             ),
             0, 1
         )
+        # We don't NEED to reset the weight array here, since it will be reset if the connection is ever re-added,
+        # but we do it anyway for accounting reasons
+        self.weight_arrays *= self.connection_masks
         return count_pruned
 
     def get_weights_mean(self):
@@ -302,3 +304,12 @@ class BetterSONN:
 
     def get_weights_max(self):
         return torch.max(self.weight_arrays.float())
+
+    def save(self, path):
+        with open(path, "wb") as f:
+            dump(self, f)
+
+    @staticmethod
+    def load(path):
+        with open(path, "rb") as f:
+            return load(f)

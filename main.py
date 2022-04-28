@@ -135,9 +135,8 @@ def main(cfg: DictConfig):
         correct_count_train = 0
         train_start = timer()
         connections_grown, connections_pruned = 0, 0
-        predictions = [0] * 10
-        y_trues = [0] * 10
-        correct_count_train_per_class = [0] * 10
+        pos_should_learn_per_column, neg_should_learn_per_column = torch.zeros(cfg.network.output_size, device=device), torch.zeros(cfg.network.output_size, device=device)
+        predictions, y_trues, correct_count_train_per_class = [0] * 10, [0] * 10, [0] * 10
 
         indexes_perm = torch.randperm(num_examples_train) if cfg.training.shuffle_batches else range(num_examples_train)
         for count, i in enumerate(indexes_perm):
@@ -146,10 +145,15 @@ def main(cfg: DictConfig):
             y = t_train[i].item()
 
             override_should_learn = (count % cfg.training.must_learn_every_n_iters) == 0
-            pred, spikes, n_grown, n_pruned = model.fit(
+            pred, spikes, n_grown, n_pruned, should_learn = model.fit(
                 x, x_raw, y,
                 override_should_learn=override_should_learn
             )
+
+            # Accounting stuff, it's FOR SURE correct, I checked it twice, don't worry (ie. this is bAd)
+            pos_should_learn_per_column[y] += should_learn[y]
+            should_learn[y] = False
+            neg_should_learn_per_column += should_learn
 
             connections_grown += n_grown
             connections_pruned += n_pruned
@@ -181,7 +185,7 @@ def main(cfg: DictConfig):
         avg_train_time_per_example = train_time / num_examples_train
 
         val_start = timer()
-        correct_count_val = validation(model, device, num_examples_val, filtered_x_test, t_test[:num_examples_val])
+        correct_count_val, val_predictions, val_y_trues, correct_count_val_per_class = validation(model, device, num_examples_val, filtered_x_test, t_test[:num_examples_val])
         val_end = timer()
 
         val_time = val_end - val_start
@@ -213,17 +217,39 @@ def main(cfg: DictConfig):
             "val_time": val_time,
             "connections_grown": connections_grown,
             "connections_pruned": connections_pruned,
+            f"num_positive_reinforcements/total": pos_should_learn_per_column.sum().item(),
+            f"num_negative_reinforcements/total": neg_should_learn_per_column.sum().item(),
+            **{
+                f"num_positive_reinforcements/column_{i}": pos_should_learn_per_column[i].item()
+                for i in range(cfg.network.output_size)
+            },
+            **{
+                f"num_negative_reinforcements/column_{i}": neg_should_learn_per_column[i].item()
+                for i in range(cfg.network.output_size)
+            },
             **{
                 f"training_pred_prop/{i}": predictions[i] / y_trues[i] if y_trues[i] > 0 else 0
-                for i in range(10)
+                for i in range(cfg.network.output_size)
             },
             **{
                 f"training_preds/{i}": predictions[i]
-                for i in range(10)
+                for i in range(cfg.network.output_size)
             },
             **{
                 f"training_pred_accuracy/{i}": correct_count_train_per_class[i] / y_trues[i] if y_trues[i] > 0 else 0
-                for i in range(10)
+                for i in range(cfg.network.output_size)
+            },
+            **{
+                f"validation_pred_prop/{i}": val_predictions[i] / val_y_trues[i] if val_y_trues[i] > 0 else 0
+                for i in range(cfg.network.output_size)
+            },
+            **{
+                f"validation_preds/{i}": val_predictions[i]
+                for i in range(cfg.network.output_size)
+            },
+            **{
+                f"validation_pred_accuracy/{i}": correct_count_val_per_class[i] / val_y_trues[i] if val_y_trues[i] > 0 else 0
+                for i in range(cfg.network.output_size)
             },
             "model_weights/mean": model.get_weights_mean(),
             "model_weights/std": model.get_weights_std(),
