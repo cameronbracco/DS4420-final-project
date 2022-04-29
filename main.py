@@ -205,8 +205,9 @@ def main(cfg: DictConfig):
         avg_train_time_per_example = train_time / num_examples_train
 
         val_start = timer()
-        correct_count_val, val_predictions, val_y_trues, correct_count_val_per_class = validation(model, device, num_examples_val, filtered_x_test, y_test[:num_examples_val])
+        correct_count_val, val_predictions, val_y_trues, correct_count_val_per_class, scores = validation(model, device, num_examples_val, filtered_x_test, y_test[:num_examples_val])
         val_end = timer()
+        acc_score, p_score, r_score, f_score = scores
 
         val_time = val_end - val_start
         avg_val_time_per_example = val_time / num_examples_val
@@ -236,6 +237,10 @@ def main(cfg: DictConfig):
             "epoch": epoch,
             "train_accuracy": training_accuracy,
             "val_accuracy": validation_accuracy,
+            "val_scores/accuracy": acc_score,
+            "val_scores/precision": p_score,
+            "val_scores/recall": r_score,
+            "val_scores/f1": f_score,
             "train_time": train_time,
             "val_time": val_time,
             "connections_grown": connections_grown,
