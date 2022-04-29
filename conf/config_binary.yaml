@@ -1,6 +1,6 @@
 training:
-  num_examples_train: 10000 # use -1 for all
-  num_examples_val: 10000 # use -1 for all
+  num_examples_train: 1000 # use -1 for all
+  num_examples_val: 1000 # use -1 for all
   num_epochs: 51
   shuffle_batches: True
   must_learn_every_n_iters: 100

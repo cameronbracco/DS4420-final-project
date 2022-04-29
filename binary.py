@@ -43,6 +43,18 @@ def main(cfg: DictConfig):
         tags=cfg.wandb.tags.split()
     )
 
+    def select_digit_pairs(a, b):
+        x_train, y_train, x_test, y_test = mnist.load(get_original_cwd())
+        x_train = x_train[np.logical_or(y_train == a, y_train == b)]
+        y_train = y_train[np.logical_or(y_train == a, y_train == b)]
+        y_train[y_train == a] = 0
+        y_train[y_train == b] = 1
+        x_test = x_test[np.logical_or(y_test == a, y_test == b)]
+        y_test = y_test[np.logical_or(y_test == a, y_test == b)]
+        y_test[y_test == a] = 0
+        y_test[y_test == b] = 1
+        return x_train, y_train, x_test, y_test
+
     # Loading data
     if cfg.general.dataset_name == 'mnist-fmnist':
         mnist_x_train, mnist_y_train, mnist_x_test, mnist_y_test = mnist.load(get_original_cwd())
@@ -64,45 +76,13 @@ def main(cfg: DictConfig):
         y_test = np.ones_like(mnist_y_test)
         y_test[mnist_y_test != 0] = 0
     elif cfg.general.dataset_name == 'mnist-six-nine':
-        x_train, y_train, x_test, y_test = mnist.load(get_original_cwd())
-        x_train = x_train[y_train == 6 | y_train == 9]
-        y_train = y_train[y_train == 6 | y_train == 9]
-        y_train[y_train == 6] = 0
-        y_train[y_train == 9] = 1
-        x_test = x_test[y_test == 6 | y_train == 9]
-        y_test = y_test[y_test == 6 | y_train == 9]
-        y_test[y_test == 6] = 0
-        y_test[y_test == 9] = 1
+        x_train, y_train, x_test, y_test = select_digit_pairs(6, 9)
     elif cfg.general.dataset_name == 'mnist-one-seven':
-        x_train, y_train, x_test, y_test = mnist.load(get_original_cwd())
-        x_train = x_train[y_train == 1 | y_train == 7]
-        y_train = y_train[y_train == 1 | y_train == 7]
-        y_train[y_train == 1] = 0
-        y_train[y_train == 7] = 1
-        x_test = x_test[y_test == 1 | y_train == 7]
-        y_test = y_test[y_test == 1 | y_train == 7]
-        y_test[y_test == 1] = 0
-        y_test[y_test == 7] = 1
+        x_train, y_train, x_test, y_test = select_digit_pairs(1, 7)
     elif cfg.general.dataset_name == 'mnist-three-eight':
-        x_train, y_train, x_test, y_test = mnist.load(get_original_cwd())
-        x_train = x_train[y_train == 3 | y_train == 8]
-        y_train = y_train[y_train == 3 | y_train == 8]
-        y_train[y_train == 3] = 0
-        y_train[y_train == 8] = 1
-        x_test = x_test[y_test == 3 | y_train == 8]
-        y_test = y_test[y_test == 3 | y_train == 8]
-        y_test[y_test == 4] = 0
-        y_test[y_test == 8] = 1
+        x_train, y_train, x_test, y_test = select_digit_pairs(3, 8)
     elif cfg.general.dataset_name == 'mnist-zero-one':
-        x_train, y_train, x_test, y_test = mnist.load(get_original_cwd())
-        x_train = x_train[y_train == 0 | y_train == 1]
-        y_train = y_train[y_train == 0 | y_train == 1]
-        y_train[y_train == 0] = 0
-        y_train[y_train == 1] = 1
-        x_test = x_test[y_test == 0 | y_train == 1]
-        y_test = y_test[y_test == 0 | y_train == 1]
-        y_test[y_test == 0] = 0
-        y_test[y_test == 1] = 1
+        x_train, y_train, x_test, y_test = select_digit_pairs(0, 1)
     else:
         raise ValueError(f"UNKNOWN DATASET NAME: {cfg.general.dataset_name}")
 
