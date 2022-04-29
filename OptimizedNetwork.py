@@ -303,16 +303,20 @@ class BetterSONN:
             return self.weight_arrays[self.weight_arrays < 0].float()
 
     def get_weights_mean(self, group='all'):
-        return torch.mean(self._get_model_weights_group(group))
+        group_weights = self._get_model_weights_group(group)
+        return torch.mean(group_weights) if group_weights.numel() != 0 else 0
 
     def get_weights_std(self, group='all'):
-        return torch.std(self._get_model_weights_group(group))
+        group_weights = self._get_model_weights_group(group)
+        return torch.std(group_weights) if group_weights.numel() != 0 else 0
 
     def get_weights_min(self, group='all'):
-        return torch.min(self._get_model_weights_group(group))
+        group_weights = self._get_model_weights_group(group)
+        return torch.min(group_weights) if group_weights.numel() != 0 else 0
 
     def get_weights_max(self, group='all'):
-        return torch.max(self._get_model_weights_group(group))
+        group_weights = self._get_model_weights_group(group)
+        return torch.max(group_weights) if group_weights.numel() != 0 else 0
 
     def get_count_total_connections(self):
         return self._get_model_weights_group('all').nelement()

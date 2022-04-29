@@ -18,6 +18,16 @@ from utils import validation
 from OptimizedNetwork import BetterSONN
 
 
+def save_model(cfg: DictConfig, model, name):
+    path = cfg.checkpointing.model_out_path.format(dataset_name=cfg.general.dataset_name)
+    model.save(path)
+    wandb.log_artifact(
+        path,
+        name,
+        'model'
+    )
+
+
 @hydra.main(config_path="conf", config_name="config")
 def main(cfg: DictConfig):
     LOG_LEVEL = logging._nameToLevel[cfg.general.log_level]
@@ -44,25 +54,25 @@ def main(cfg: DictConfig):
     x_test = torch.from_numpy(x_test)
     y_test = torch.from_numpy(y_test)
 
-    num_examples_train = cfg.training.num_examples_train if cfg.training.num_examples_train > 0 else len(x_train)
-    num_examples_val = cfg.training.num_examples_val if cfg.training.num_examples_val > 0 else len(x_test)
-
-    filter_thresholds = torch.Tensor([int(t) for t in cfg.preprocessing.pixel_intensity_levels.split()])
-
-    sampled_x_train = x_train[:num_examples_train]
-    sampled_x_test = x_test[:num_examples_val]
-
-    filtered_x_train = torch.where(sampled_x_train.unsqueeze(2) >= filter_thresholds, 1, 0)
-    filtered_x_test = torch.where(sampled_x_test.unsqueeze(2) >= filter_thresholds, 1, 0)
-
-    initial_connection_weight = cfg.network.initial_connection_weight.weight_value \
-        if cfg.network.initial_connection_weight.weight_value \
-        else int(cfg.network.spike_threshold / 10)
-
     device = ('cuda' if torch.cuda.is_available() else 'cpu') \
         if cfg.general.device == 'auto' \
         else cfg.general.device
     print("Using device:", device)
+
+    num_examples_train = cfg.training.num_examples_train if cfg.training.num_examples_train > 0 else len(x_train)
+    num_examples_val = cfg.training.num_examples_val if cfg.training.num_examples_val > 0 else len(x_test)
+
+    filter_thresholds = torch.Tensor([int(t) for t in cfg.preprocessing.pixel_intensity_levels.split()]).to(device)
+
+    sampled_x_train = x_train[:num_examples_train].to(device)
+    sampled_x_test = x_test[:num_examples_val].to(device)
+
+    filtered_x_train = torch.where(sampled_x_train.unsqueeze(2) >= filter_thresholds, 1, 0).to(device)
+    filtered_x_test = torch.where(sampled_x_test.unsqueeze(2) >= filter_thresholds, 1, 0).to(device)
+
+    initial_connection_weight = cfg.network.initial_connection_weight.weight_value \
+        if cfg.network.initial_connection_weight.weight_value \
+        else int(cfg.network.spike_threshold / 10)
 
     RANDOM_SEED = cfg.general.random_seed
 
@@ -136,6 +146,8 @@ def main(cfg: DictConfig):
 
     update_pbar_every_n = num_examples_train / cfg.general.update_pbar_n_times_per_epoch
 
+    best_val_acc = float("-inf")
+
     for epoch in (epoch_pbar := tqdm(range(cfg.training.num_epochs), position=0, leave=True)):
 
         correct_count_train = 0
@@ -146,8 +158,8 @@ def main(cfg: DictConfig):
 
         indexes_perm = torch.randperm(num_examples_train) if cfg.training.shuffle_batches else range(num_examples_train)
         for count, i in enumerate(indexes_perm):
-            x_raw = sampled_x_train[i, :].to(device)
-            x = filtered_x_train[i, :].to(device)
+            x_raw = sampled_x_train[i, :]
+            x = filtered_x_train[i, :]
             y = y_train[i].item()
 
             override_should_learn = (count % cfg.training.must_learn_every_n_iters) == 0
@@ -218,10 +230,12 @@ def main(cfg: DictConfig):
             print(predictions)
 
         # Logging to W&B
+        training_accuracy = correct_count_train / num_examples_train
+        validation_accuracy = correct_count_val / num_examples_val
         wandb.log({
             "epoch": epoch,
-            "train_accuracy": correct_count_train / num_examples_train,
-            "val_accuracy": correct_count_val / num_examples_val,
+            "train_accuracy": training_accuracy,
+            "val_accuracy": validation_accuracy,
             "train_time": train_time,
             "val_time": val_time,
             "connections_grown": connections_grown,
@@ -278,14 +292,16 @@ def main(cfg: DictConfig):
             "open_connections/negative": model.get_count_negative_weights(),
         })
 
-        if epoch % cfg.checkpointing.save_every_n_epochs == 0:
-            path = cfg.checkpointing.model_out_path.format(dataset_name=cfg.general.dataset_name)
-            model.save(path)
-            wandb.log_artifact(
-                path,
-                f"{cfg.checkpointing.name.format(dataset_name=cfg.general.dataset_name)}_epoch_{epoch}",
-                'model'
-            )
+        if epoch % cfg.checkpointing.save_every_n_epochs == 0 or epoch + 1 == cfg.training.num_epochs:
+            name = f"{cfg.checkpointing.name.format(dataset_name=cfg.general.dataset_name)}_epoch_{epoch}"
+            save_model(cfg, model, name)
+
+        if cfg.checkpointing.save_best_by_val_acc:
+            if validation_accuracy > best_val_acc:
+                name = f"{cfg.checkpointing.name.format(dataset_name=cfg.general.dataset_name)}_best_val_acc"
+                save_model(cfg, model, name)
+
+
 
 
 if __name__ == "__main__":

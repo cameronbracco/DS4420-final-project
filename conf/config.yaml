@@ -46,11 +46,9 @@ general:
 wandb:
   tags:
     testing
-    single_quant
-    float
   mode: online
 checkpointing:
   save_every_n_epochs: 10
-  save_best: False  # Not implemented
+  save_best_by_val_acc: False
   name: 'sonn_{dataset_name}'
   model_out_path: './sonn_{dataset_name}.pickle'
