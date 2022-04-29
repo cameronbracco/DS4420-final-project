@@ -5,6 +5,7 @@ import os
 from hydra.utils import get_original_cwd
 from omegaconf import DictConfig
 
+import fmnist
 import mnist
 import random
 import numpy as np
@@ -30,13 +31,18 @@ def main(cfg: DictConfig):
         tags=cfg.wandb.tags.split()
     )
 
-    # Loading MNIST data
-    x_train, t_train, x_test, t_test = mnist.load(get_original_cwd())
+    # Loading data
+    if cfg.general.dataset_name == 'mnist':
+        x_train, y_train, x_test, y_test = mnist.load(get_original_cwd())
+    elif cfg.general.dataset_name == 'fmnist':
+        x_train, y_train, x_test, y_test = fmnist.load(get_original_cwd())
+    else:
+        raise ValueError(f"UNKNOWN DATASET NAME: {cfg.general.dataset_name}")
 
     x_train = torch.from_numpy(x_train)
-    t_train = torch.from_numpy(t_train)
+    y_train = torch.from_numpy(y_train)
     x_test = torch.from_numpy(x_test)
-    t_test = torch.from_numpy(t_test)
+    y_test = torch.from_numpy(y_test)
 
     num_examples_train = cfg.training.num_examples_train if cfg.training.num_examples_train > 0 else len(x_train)
     num_examples_val = cfg.training.num_examples_val if cfg.training.num_examples_val > 0 else len(x_test)
@@ -142,7 +148,7 @@ def main(cfg: DictConfig):
         for count, i in enumerate(indexes_perm):
             x_raw = sampled_x_train[i, :].to(device)
             x = filtered_x_train[i, :].to(device)
-            y = t_train[i].item()
+            y = y_train[i].item()
 
             override_should_learn = (count % cfg.training.must_learn_every_n_iters) == 0
             pred, spikes, n_grown, n_pruned, n_updated, should_learn = model.fit(
@@ -187,7 +193,7 @@ def main(cfg: DictConfig):
         avg_train_time_per_example = train_time / num_examples_train
 
         val_start = timer()
-        correct_count_val, val_predictions, val_y_trues, correct_count_val_per_class = validation(model, device, num_examples_val, filtered_x_test, t_test[:num_examples_val])
+        correct_count_val, val_predictions, val_y_trues, correct_count_val_per_class = validation(model, device, num_examples_val, filtered_x_test, y_test[:num_examples_val])
         val_end = timer()
 
         val_time = val_end - val_start
@@ -273,10 +279,11 @@ def main(cfg: DictConfig):
         })
 
         if epoch % cfg.checkpointing.save_every_n_epochs == 0:
-            model.save(cfg.checkpointing.model_out_path)
+            path = cfg.checkpointing.model_out_path.format(dataset_name=cfg.general.dataset_name)
+            model.save(path)
             wandb.log_artifact(
-                cfg.checkpointing.model_out_path,
-                f"{cfg.checkpointing.name}_epoch_{epoch}",
+                path,
+                f"{cfg.checkpointing.name.format(dataset_name=cfg.general.dataset_name)}_epoch_{epoch}",
                 'model'
             )
 

@@ -42,6 +42,7 @@ general:
   update_pbar_n_times_per_epoch: 10
   device: auto
   random_seed: 42
+  dataset_name: mnist
 wandb:
   tags:
     testing
@@ -51,5 +52,5 @@ wandb:
 checkpointing:
   save_every_n_epochs: 10
   save_best: False  # Not implemented
-  name: sonn_mnist
-  model_out_path: './sonn_mnist.pickle'
+  name: 'sonn_{dataset_name}'
+  model_out_path: './sonn_{dataset_name}.pickle'
