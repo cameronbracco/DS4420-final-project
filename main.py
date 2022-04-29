@@ -134,7 +134,7 @@ def main(cfg: DictConfig):
 
         correct_count_train = 0
         train_start = timer()
-        connections_grown, connections_pruned = 0, 0
+        weights_updated, connections_grown, connections_pruned = 0, 0, 0
         pos_should_learn_per_column, neg_should_learn_per_column = torch.zeros(cfg.network.output_size, device=device), torch.zeros(cfg.network.output_size, device=device)
         predictions, y_trues, correct_count_train_per_class = [0] * 10, [0] * 10, [0] * 10
 
@@ -145,7 +145,7 @@ def main(cfg: DictConfig):
             y = t_train[i].item()
 
             override_should_learn = (count % cfg.training.must_learn_every_n_iters) == 0
-            pred, spikes, n_grown, n_pruned, should_learn = model.fit(
+            pred, spikes, n_grown, n_pruned, n_updated, should_learn = model.fit(
                 x, x_raw, y,
                 override_should_learn=override_should_learn
             )
@@ -155,6 +155,7 @@ def main(cfg: DictConfig):
             should_learn[y] = False
             neg_should_learn_per_column += should_learn
 
+            weights_updated += n_updated
             connections_grown += n_grown
             connections_pruned += n_pruned
 
@@ -176,6 +177,7 @@ def main(cfg: DictConfig):
                     f"avg val time: {avg_val_time_per_example:.5f} - "
                     f"connections grown: {connections_grown} - "
                     f"connections pruned: {connections_pruned} - "
+                    f"weights updated: {weights_updated} - "
                     f"predictions: [{', '.join([str(p) + '/' + str(t)  for p, t in zip(predictions, y_trues)])}]"
                 )
 
@@ -203,6 +205,7 @@ def main(cfg: DictConfig):
             f"avg val time: {avg_val_time_per_example:.5f} - "
             f"connections grown: {connections_grown} - "
             f"connections pruned: {connections_pruned} - "
+            f"weights updated: {weights_updated} - "
             f"predictions: [{', '.join([str(p) + '/' + str(t)  for p, t in zip(predictions, y_trues)])}]"
         )
         if LOG_LEVEL == logging.DEBUG:
@@ -217,6 +220,7 @@ def main(cfg: DictConfig):
             "val_time": val_time,
             "connections_grown": connections_grown,
             "connections_pruned": connections_pruned,
+            "weights_updated": weights_updated,
             f"num_positive_reinforcements/total": pos_should_learn_per_column.sum().item(),
             f"num_negative_reinforcements/total": neg_should_learn_per_column.sum().item(),
             **{
@@ -227,10 +231,10 @@ def main(cfg: DictConfig):
                 f"num_negative_reinforcements/column_{i}": neg_should_learn_per_column[i].item()
                 for i in range(cfg.network.output_size)
             },
-            **{
-                f"training_pred_prop/{i}": predictions[i] / y_trues[i] if y_trues[i] > 0 else 0
-                for i in range(cfg.network.output_size)
-            },
+            # **{
+            #     f"training_pred_prop/{i}": predictions[i] / y_trues[i] if y_trues[i] > 0 else 0
+            #     for i in range(cfg.network.output_size)
+            # },
             **{
                 f"training_preds/{i}": predictions[i]
                 for i in range(cfg.network.output_size)
@@ -239,10 +243,10 @@ def main(cfg: DictConfig):
                 f"training_pred_accuracy/{i}": correct_count_train_per_class[i] / y_trues[i] if y_trues[i] > 0 else 0
                 for i in range(cfg.network.output_size)
             },
-            **{
-                f"validation_pred_prop/{i}": val_predictions[i] / val_y_trues[i] if val_y_trues[i] > 0 else 0
-                for i in range(cfg.network.output_size)
-            },
+            # **{
+            #     f"validation_pred_prop/{i}": val_predictions[i] / val_y_trues[i] if val_y_trues[i] > 0 else 0
+            #     for i in range(cfg.network.output_size)
+            # },
             **{
                 f"validation_preds/{i}": val_predictions[i]
                 for i in range(cfg.network.output_size)
@@ -251,11 +255,30 @@ def main(cfg: DictConfig):
                 f"validation_pred_accuracy/{i}": correct_count_val_per_class[i] / val_y_trues[i] if val_y_trues[i] > 0 else 0
                 for i in range(cfg.network.output_size)
             },
-            "model_weights/mean": model.get_weights_mean(),
-            "model_weights/std": model.get_weights_std(),
-            "model_weights/min": model.get_weights_min(),
-            "model_weights/max": model.get_weights_max(),
+            "model_weights/positive/mean": model.get_weights_mean(group='positive'),
+            "model_weights/negative/mean": model.get_weights_mean(group='negative'),
+            "model_weights/all/mean": model.get_weights_mean(group='all'),
+            "model_weights/positive/std": model.get_weights_std(group='positive'),
+            "model_weights/negative/std": model.get_weights_std(group='negative'),
+            "model_weights/all/std": model.get_weights_std(group='all'),
+            "model_weights/positive/min": model.get_weights_min(group='positive'),
+            "model_weights/negative/min": model.get_weights_min(group='negative'),
+            "model_weights/all/min": model.get_weights_min(group='all'),
+            "model_weights/positive/max": model.get_weights_max(group='positive'),
+            "model_weights/negative/max": model.get_weights_max(group='negative'),
+            "model_weights/all/max": model.get_weights_max(group='all'),
+            "open_connections/total": model.get_count_total_connections(),
+            "open_connections/positive": model.get_count_positive_weights(),
+            "open_connections/negative": model.get_count_negative_weights(),
         })
+
+        if epoch % cfg.checkpointing.save_every_n_epochs == 0:
+            model.save(cfg.checkpointing.model_out_path)
+            wandb.log_artifact(
+                cfg.checkpointing.model_out_path,
+                f"{cfg.checkpointing.name}_epoch_{epoch}",
+                'model'
+            )
 
 
 if __name__ == "__main__":

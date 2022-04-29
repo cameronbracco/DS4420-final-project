@@ -135,10 +135,10 @@ class BetterSONN:
         y_hat = torch.argmax(col_spike_counts).item()
         return y_hat
 
-    def update_weights(self, x, y_true, should_learn) -> int:
-        n_pruned = 0
-        n_cycles = x.size(1)
+    def update_weights(self, x, y_true, should_learn) -> Tuple[int, int]:
+        n_pruned, n_updated = 0, 0
         weights_per_column_for_cycle = torch.zeros((self.output_size, self.num_neurons_per_column), device=self.device).int()
+        n_cycles = x.size(1)
         for cycle in range(n_cycles):
             # dims: [columns x neurons x connections]
             # will be nonzero if the connection should be updated (based on whether:
@@ -164,12 +164,13 @@ class BetterSONN:
             masked_weight_adjustments = weight_adjustment_mask * amount_to_adjust_per_column.view(self.output_size, 1, 1)
 
             self.weight_arrays += masked_weight_adjustments
+            n_updated += len(torch.nonzero(masked_weight_adjustments))
             n_pruned += self.prune()
 
             weights_per_column_for_cycle[passes_min_threshold] = 0
             weights_per_column_for_cycle = weights_per_column_for_cycle.bitwise_right_shift(1)  # divides by 2
 
-        return n_pruned
+        return n_pruned, n_updated
 
     def fit(self, x, x_raw, y_true, override_should_learn=False):  # change this to training only
         col_spike_counts = self.forward(x)
@@ -186,7 +187,7 @@ class BetterSONN:
         n_grown = self.grow(x_raw, y_true, should_learn)
 
         # ------ Learn ------
-        n_pruned = self.update_weights(x, y_true, should_learn)
+        n_pruned, n_updated = self.update_weights(x, y_true, should_learn)
 
         if should_learn[y_true] and self.samples_learned_from % self.decay_prune_every_n_samples:
             # ------ Decay all connections ------
@@ -195,7 +196,7 @@ class BetterSONN:
             # ------ Prune bad connections ------
             n_pruned += self.prune()
 
-        return y_hat, col_spike_counts, n_grown, n_pruned, should_learn
+        return y_hat, col_spike_counts, n_grown, n_pruned, n_updated, should_learn
 
     def count_spikes(self, x):
 
@@ -293,17 +294,34 @@ class BetterSONN:
         self.weight_arrays *= self.connection_masks
         return count_pruned
 
-    def get_weights_mean(self):
-        return torch.mean(self.weight_arrays.float())
+    def _get_model_weights_group(self, group) -> Tensor:
+        if group == 'all':
+            return self.weight_arrays[self.weight_arrays != 0].float()
+        if group == 'positive':
+            return self.weight_arrays[self.weight_arrays > 0].float()
+        if group == 'negative':
+            return self.weight_arrays[self.weight_arrays < 0].float()
 
-    def get_weights_std(self):
-        return torch.std(self.weight_arrays.float())
+    def get_weights_mean(self, group='all'):
+        return torch.mean(self._get_model_weights_group(group))
 
-    def get_weights_min(self):
-        return torch.min(self.weight_arrays.float())
+    def get_weights_std(self, group='all'):
+        return torch.std(self._get_model_weights_group(group))
 
-    def get_weights_max(self):
-        return torch.max(self.weight_arrays.float())
+    def get_weights_min(self, group='all'):
+        return torch.min(self._get_model_weights_group(group))
+
+    def get_weights_max(self, group='all'):
+        return torch.max(self._get_model_weights_group(group))
+
+    def get_count_total_connections(self):
+        return self._get_model_weights_group('all').nelement()
+
+    def get_count_positive_weights(self):
+        return self._get_model_weights_group('positive').nelement()
+
+    def get_count_negative_weights(self):
+        return self._get_model_weights_group('negative').nelement()
 
     def save(self, path):
         with open(path, "wb") as f:
