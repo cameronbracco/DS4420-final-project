@@ -11,3 +11,5 @@ outputs
 *.gz
 
 cmake-build-debug
+data
+multirun
