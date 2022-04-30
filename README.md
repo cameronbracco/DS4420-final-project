@@ -1,6 +1,8 @@
 # DS4420-final-project
 Final Project for DS4420 - Machine Learning and Data Mining 2
 
+## Report
+https://wandb.ai/dpis-disciples/test-project/reports/DS4420-Machine-Learning-2-Validating-and-Investigating-Self-Organizing-Neural-Networks-SONN---VmlldzoxOTIxNzg0?accessToken=k9iqt6gs6ffehgbv4bx9uast9txud8zaoay13x5gst9vx24o2790zaexikl09nn8
 
 ## Data Loading
 
