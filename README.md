@@ -9,10 +9,7 @@ Upon cloning, run `python3 mnist.py` to download and save a local version of the
 ## Running Stuff
 
 NOTE: Before you run the first time, make sure you have run `pip install wandb` and log in
-using `wandb login` 
-
-If you do not want to sync data to the cloud, run `wandb offline`. This can then be toggled again
-using `wandb online`. You probably want to run in offline mode. 
+using `wandb login`. Alternatively, you can not log in and run it in offline mode by running `wandb offline`.
 
 To run our model with MNIST, set the dataset name in config.yaml to "mnist".
 Run main.py
