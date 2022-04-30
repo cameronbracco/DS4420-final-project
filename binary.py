@@ -30,7 +30,7 @@ def save_model(cfg: DictConfig, model, name):
     )
 
 
-@hydra.main(config_path="conf", config_name="config")
+@hydra.main(config_path="conf", config_name="config_binary")
 def main(cfg: DictConfig):
     LOG_LEVEL = logging._nameToLevel[cfg.general.log_level]
 
@@ -43,13 +43,46 @@ def main(cfg: DictConfig):
         tags=cfg.wandb.tags.split()
     )
 
-    # Loading data
-    if cfg.general.dataset_name == 'mnist':
+    def select_digit_pairs(a, b):
         x_train, y_train, x_test, y_test = mnist.load(get_original_cwd())
-    elif cfg.general.dataset_name == 'fmnist':
-        x_train, y_train, x_test, y_test = fmnist.load(get_original_cwd())
-    elif cfg.general.dataset_name == 'cifar10':
-        x_train, y_train, x_test, y_test = cifar10.load(get_original_cwd(), method=cfg.cifar.method)
+        x_train = x_train[np.logical_or(y_train == a, y_train == b)]
+        y_train = y_train[np.logical_or(y_train == a, y_train == b)]
+        y_train[y_train == a] = 0
+        y_train[y_train == b] = 1
+        x_test = x_test[np.logical_or(y_test == a, y_test == b)]
+        y_test = y_test[np.logical_or(y_test == a, y_test == b)]
+        y_test[y_test == a] = 0
+        y_test[y_test == b] = 1
+        return x_train, y_train, x_test, y_test
+
+    # Loading data
+    if cfg.general.dataset_name == 'mnist-fmnist':
+        mnist_x_train, mnist_y_train, mnist_x_test, mnist_y_test = mnist.load(get_original_cwd())
+        fmnist_x_train, fmnist_y_train, fmnist_x_test, fmnist_y_test = fmnist.load(get_original_cwd())
+        x_train = np.hstack([mnist_x_train, fmnist_x_train]).reshape(-1, 784).reshape(120000, -1)
+        x_test = np.hstack([mnist_x_test, fmnist_x_test]).reshape(-1, 784).reshape(20000, -1)
+        y_train = np.hstack([np.zeros((10000, 1)), np.ones((10000, 1))]).reshape(20000, -1)
+        y_test = np.hstack([np.zeros((10000, 1)), np.ones((10000, 1))]).reshape(20000, -1)
+    elif cfg.general.dataset_name == 'mnist-even-odd':
+        x_train, mnist_y_train, x_test, mnist_y_test = mnist.load(get_original_cwd())
+        y_train = np.ones_like(mnist_y_train)
+        y_train[mnist_y_train % 2 == 0] = 0
+        y_test = np.ones_like(mnist_y_test)
+        y_test[mnist_y_test % 2 == 0] = 0
+    elif cfg.general.dataset_name == 'mnist-zero-other':
+        x_train, mnist_y_train, x_test, mnist_y_test = mnist.load(get_original_cwd())
+        y_train = np.ones_like(mnist_y_train)
+        y_train[mnist_y_train != 0] = 0
+        y_test = np.ones_like(mnist_y_test)
+        y_test[mnist_y_test != 0] = 0
+    elif cfg.general.dataset_name == 'mnist-six-nine':
+        x_train, y_train, x_test, y_test = select_digit_pairs(6, 9)
+    elif cfg.general.dataset_name == 'mnist-one-seven':
+        x_train, y_train, x_test, y_test = select_digit_pairs(1, 7)
+    elif cfg.general.dataset_name == 'mnist-three-eight':
+        x_train, y_train, x_test, y_test = select_digit_pairs(3, 8)
+    elif cfg.general.dataset_name == 'mnist-zero-one':
+        x_train, y_train, x_test, y_test = select_digit_pairs(0, 1)
     else:
         raise ValueError(f"UNKNOWN DATASET NAME: {cfg.general.dataset_name}")
 
@@ -62,7 +95,6 @@ def main(cfg: DictConfig):
         if cfg.general.device == 'auto' \
         else cfg.general.device
     print("Using device:", device)
-
     num_examples_train = cfg.training.num_examples_train if cfg.training.num_examples_train > 0 else len(x_train)
     num_examples_val = cfg.training.num_examples_val if cfg.training.num_examples_val > 0 else len(x_test)
 
@@ -78,7 +110,7 @@ def main(cfg: DictConfig):
 
     initial_connection_weight = cfg.network.initial_connection_weight.weight_value \
         if cfg.network.initial_connection_weight.weight_value \
-        else int(cfg.network.spike_threshold / 10)
+        else int(cfg.network.spike_threshold / cfg.network.output_size)
 
     RANDOM_SEED = cfg.general.random_seed
 
@@ -162,7 +194,7 @@ def main(cfg: DictConfig):
         pos_should_learn_per_column, neg_should_learn_per_column = torch.zeros(cfg.network.output_size,
                                                                                device=device), torch.zeros(
             cfg.network.output_size, device=device)
-        predictions, y_trues, correct_count_train_per_class = [0] * 10, [0] * 10, [0] * 10
+        predictions, y_trues, correct_count_train_per_class = [0] * cfg.network.output_size, [0] * cfg.network.output_size, [0] * cfg.network.output_size
 
         indexes_perm = torch.randperm(num_examples_train) if cfg.training.shuffle_batches else range(num_examples_train)
         for count, i in enumerate(indexes_perm):

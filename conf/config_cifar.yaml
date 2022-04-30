@@ -1,13 +1,13 @@
 training:
-  num_examples_train: -1 # use -1 for all
-  num_examples_val: -1 # use -1 for all
+  num_examples_train: 1000 # use -1 for all
+  num_examples_val: 1000 # use -1 for all
   num_epochs: 100
   shuffle_batches: True
   must_learn_every_n_iters: 100
 network:
-  input_size: 784
+  input_size: 3072
   output_size: 10
-  num_neurons_per_column: 792
+  num_neurons_per_column: 512
   num_connections_per_column: 10
   spike_threshold: 1000000
   max_connection_weight: 1000000
@@ -20,11 +20,11 @@ network:
   positive_reinforce_amount: 500
   negative_reinforce_amount: -500
   positive_quantilizer:
-    inc_value: 19
+    inc_value: 11.1
     dec_value: 1
     denom: 100
   negative_quantilizer:
-    inc_value: 150
+    inc_value: 89.5
     dec_value: 1
     denom: 900
   decay_amount: 20
@@ -42,13 +42,15 @@ general:
   update_pbar_n_times_per_epoch: 10
   device: auto
   random_seed: 42
-  dataset_name: mnist
+  dataset_name: cifar10
 wandb:
   tags:
-    all
+    testing
   mode: online
 checkpointing:
   save_every_n_epochs: 10
   save_best_by_val_acc: True
   name: 'sonn_{dataset_name}'
   model_out_path: './sonn_{dataset_name}.pickle'
+cifar:
+  method: average

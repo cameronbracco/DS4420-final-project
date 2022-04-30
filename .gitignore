@@ -1,4 +1,5 @@
 __pycache__
+cmake-build-debug
 wandb
 venv
 
@@ -11,3 +12,5 @@ outputs
 *.gz
 
 cmake-build-debug
+data
+multirun

@@ -5,8 +5,11 @@ tqdm
 torch
 hydra-core
 omegaconf
+fnn-baseline
 pytorch-lightning
 torchmetrics
 sklearn
 torchvision
 lightning-bolts
+scikit-learn
+matplotlib
