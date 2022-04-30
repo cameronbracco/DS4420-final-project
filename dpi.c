@@ -5,7 +5,7 @@
 // if have a GPU: uncomment #define GPU and see your CUDA documentation.
 //
 //  throughout, variable ‘a’ is a group, ’n’ a neuron in a group, ‘s’ a connection in a neuron
-#define GPU 1
+
 #define CPU_THREAD 4
 // warning without GPU: 180 hours with 4 threads to 98.9% , 18h to 98.65%
 
@@ -73,7 +73,6 @@ int nbu;
 int nblearn;
 int numBatchesTested;
 int splitIndex;
-int toreload[OUTPUT_SIZE];
 
 // threading
 struct ThreadArgs {
@@ -177,128 +176,6 @@ void quant(int sampleIdx) {
         }
     }
 }
-
-#ifdef GPU
-cudaStream_t streams[NUM_EXAMPLES_TRAIN];
-short int *gpu_from;
-int *gpu_weight, *gpu_nsp, *gpu_list[3], *gpu_nspg, *gpu_togrp;
-unsigned char *gpu_wd, *gpu_in[2];
-
-__global__ void Kernel_Test(int nsize, int nsyn, int ncyc, short int *from,
-                            int *weights, unsigned char *in, unsigned char *intensityThresholds, int *nsp,
-                            int listNb, int *list, int sh, int nsh)
-{
-    int s, n, index, ana, tot, ns, cycle, off7sp, sp;
-
-    n = blockIdx.x * blockDim.x + threadIdx.x;
-    ns = n * nsyn;
-    ana = n / nsize;
-    n = n - nsize * ana;
-    if (n < nsize && ana < OUTPUT_SIZE)
-    {
-        for (index = sh; index < sh + nsh; index++)
-        {
-            off7sp = list[index] * INPUT_SIZE;
-            tot = 0;
-            sp = 0;
-            for (cycle = 0; cycle < ncyc; cycle++)
-            {
-                for (s = 0; s < nsyn; s++)
-                    tot += (in[off7sp + from[ns + s]] >= intensityThresholds[cycle]) * weights[ns + s];
-
-                if (tot > MAX_CONNECTION_WEIGHT)
-                {
-                    sp++;
-                    tot = 0;
-                }
-                else
-                    tot >>= 1;
-            }
-            if (sp)
-                atomicAdd(nsp + index * OUTPUT_SIZE + ana, sp);
-        }
-    }
-}
-
-void init_gpu()
-{
-    int set, i;
-
-    cudaSetDevice(0);
-
-    cudaMalloc((void **)&gpu_wd, NUM_FILTER_CYCLES * sizeof(unsigned char));
-    for (set = 0; set < 2; set++)
-        cudaMalloc((void **)&gpu_in[set], splitSize[set] * INPUT_SIZE * sizeof(unsigned char));
-    for (set = 0; set < 3; set++)
-        cudaMalloc((void **)&gpu_list[set], splitSizes[set] * sizeof(int));
-    cudaMalloc((void **)&gpu_from, OUTPUT_SIZE * NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON * sizeof(short int));
-    cudaMalloc((void **)&gpu_weight, OUTPUT_SIZE * NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON * sizeof(int));
-    cudaMalloc((void **)&gpu_nsp, splitSize[0] * OUTPUT_SIZE * sizeof(int));
-    cudaDeviceSynchronize();
-
-    cudaMemcpy(gpu_wd, intensityFilters, NUM_FILTER_CYCLES * sizeof(unsigned char), cudaMemcpyHostToDevice);
-    for (set = 0; set < 2; set++)
-    {
-        for (i = 0; i < splitSize[set]; i++)
-            cudaMemcpy(gpu_in[set] + i * INPUT_SIZE, in[set][i], INPUT_SIZE * sizeof(unsigned char), cudaMemcpyHostToDevice);
-        cudaMemcpy(gpu_list[set], indexOfSampleInSplit[set], splitSize[set] * sizeof(int), cudaMemcpyHostToDevice);
-    }
-    for (i = 0; i < 6000; i++)
-        cudaStreamCreate(&(streams[i]));
-    cudaDeviceSynchronize();
-}
-
-void test_gpu()
-{
-    int i, a, n, b, is, isnot, ok, sample, g, bssize, startat, set, l;
-    static int tmpn[OUTPUT_SIZE * NUM_EXAMPLES_TRAIN];
-
-    set = splitToDatasetMap[splitIndex];
-    for (a = 0; a < OUTPUT_SIZE; a++)
-    { // upload from & weights
-        if (toreload[a] == 1)
-        {
-            for (n = 0; n < NUM_NEURONS_PER_COLUMN; n++)
-            {
-                bcopy(from[a][n], (void *)(tempReceptorIndices + (a * NUM_NEURONS_PER_COLUMN + n) * NUM_CONNECTIONS_PER_NEURON), NUM_CONNECTIONS_PER_NEURON * sizeof(short int));
-                bcopy(weights[a][n], (void *)(tempWeights + (a * NUM_NEURONS_PER_COLUMN + n) * NUM_CONNECTIONS_PER_NEURON), NUM_CONNECTIONS_PER_NEURON * sizeof(int));
-            }
-            cudaMemcpy(gpu_from + a * NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON, tempReceptorIndices + a * NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON, NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON * sizeof(short int), cudaMemcpyHostToDevice);
-            cudaMemcpy(gpu_weight + a * NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON, tempWeights + a * NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON, NUM_NEURONS_PER_COLUMN * NUM_CONNECTIONS_PER_NEURON * sizeof(int), cudaMemcpyHostToDevice);
-            toreload[a] = 0;
-        }
-    }
-
-    if (splitIndex == 2)
-        cudaMemcpy(gpu_list[splitIndex], indexOfSampleInSplit[splitIndex], splitSizes[splitIndex] * sizeof(int), cudaMemcpyHostToDevice); // upload list
-    cudaMemcpy(gpu_nsp, zero, OUTPUT_SIZE * splitSize[0] * sizeof(int), cudaMemcpyHostToDevice);
-    cudaDeviceSynchronize();
-
-    // run
-    if (splitIndex == 2)
-        bssize = splitSizes[splitIndex];
-    else
-        bssize = 100;
-
-    for (startat = 0; startat < splitSizes[splitIndex]; startat += bssize)
-        Kernel_Test<<<((OUTPUT_SIZE * NUM_NEURONS_PER_COLUMN + 31)) / 32, 32, 0, streams[startat]>>>(NUM_NEURONS_PER_COLUMN, NUM_CONNECTIONS_PER_NEURON, NUM_FILTER_CYCLES, gpu_from, gpu_weight, gpu_in[set], gpu_wd, gpu_nsp,
-                                                                              splitIndex, gpu_list[splitIndex], startat, bssize);
-    cudaDeviceSynchronize();
-
-    // download nsp
-    cudaMemcpy(tmpn, gpu_nsp, splitSizes[splitIndex] * OUTPUT_SIZE * sizeof(int), cudaMemcpyDeviceToHost);
-    cudaDeviceSynchronize();
-
-    // dispatch
-    for (l = 0; l < splitSizes[splitIndex]; l++)
-    {
-        if (splitIndex == 2)
-            bcopy(tmpn + l * OUTPUT_SIZE, spikeCounts[2][indexOfSampleInSplit[splitIndex][l]], OUTPUT_SIZE * sizeof(int));
-        else
-            bcopy(tmpn + l * OUTPUT_SIZE, spikeCounts[set][l], OUTPUT_SIZE * sizeof(int));
-    }
-}
-#endif
 
 void readset(int set, char *name_lbl, char *name_data) {
     int nn, n, fdl, fdi;
@@ -417,11 +294,7 @@ int test() {
     int set = splitToDatasetMap[splitIndex];;
     int numCorrectPredictions = 0;
 
-#ifdef GPU
-    test_gpu();
-#else
     testMultiThreadedManager();
-#endif
 
     // At this point we have the spike counts for all samples in the batch
     // Now we need to evaluate how well we did
@@ -464,30 +337,28 @@ void test_mt_init() {
     }
 }
 
-void loss(int b) {
-    int a, n, s, w;
-
-    for (a = 0; a < OUTPUT_SIZE; a++) {
-        for (n = 0; n < NUM_NEURONS_PER_COLUMN; n++) {
-            for (s = 0; s < NUM_CONNECTIONS_PER_NEURON; s++) {
-                w = weights[a][n][s];
+void loss(int numSamplesLearnedFrom) {
+    for (int column = 0; column < OUTPUT_SIZE; column++) {
+        for (int neuron = 0; neuron < NUM_NEURONS_PER_COLUMN; neuron++) {
+            for (int connection = 0; connection < NUM_CONNECTIONS_PER_NEURON; connection++) {
+                int w = weights[column][neuron][connection];
                 if (w) {
-                    if (lossw && b % losswNb == 0) {
-                        if (w > 0)
-                            w -= lossw;
-                        else
-                            w += lossw;
+                    if (numSamplesLearnedFrom % losswNb == 0) {  // THIS IS THE DECAY CODE!
+                        if (w > 0) {  // Decays towards 0
+                            w -= lossw;  // decrease if positive
+                        } else {
+                            w += lossw;  // increase if negative
+                        }
                     }
-                    if (abs(w) < MIN_CONNECTION_WEIGHT) {
+                    if (abs(w) < MIN_CONNECTION_WEIGHT) {  // THIS IS THE PRUNNING CODE!
                         w = 0;
-                        numConnectionsPerColumn[a]--;
-                        numConnectionsPerNeuronPerColumn[a][n]--;
+                        numConnectionsPerColumn[column]--;
+                        numConnectionsPerNeuronPerColumn[column][neuron]--;
                     }
-                    weights[a][n][s] = w;
+                    weights[column][neuron][connection] = w;
                 }
             }
         }
-        toreload[a] = 1;
     }
 }
 
@@ -714,7 +585,6 @@ void batch() {
                 // Why do we do this in the for loop in the batch?
                 connect(maxConnectionsToGrowPerBatch, sampleIdx, yTrue, MAX_CONNECTION_WEIGHT / divNew);
                 learn(sampleIdx, yTrue, adjp);
-                toreload[yTrue] = 1;
                 nblearn++;
                 numSamplesLearnedFrom++;
                 if (lossw && nblearn % losswNb == 0) {
@@ -735,7 +605,6 @@ void batch() {
                         // DIFFERENCE: Negative initial weights
                         connect(maxConnectionsToGrowPerBatch, sampleIdx, isnot, -MAX_CONNECTION_WEIGHT / divNew);
                         learn(sampleIdx, isnot, adjn);
-                        toreload[isnot] = 1;
                         bu++;
                     }
                 }
@@ -761,11 +630,9 @@ int main() {
     readset(0, "./train-labels-idx1-ubyte", "./train-images-idx3-ubyte");
     readset(1, "./t10k-labels-idx1-ubyte", "./t10k-images-idx3-ubyte");
     init();
-#ifdef GPU
-    init_gpu();
-#else
+
     test_mt_init();
-#endif
+
     learn_mt_init();
 
     // params

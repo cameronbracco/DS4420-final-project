@@ -1,6 +1,7 @@
 ##### -------------------------------------------------------
 ##### Script From https://github.com/hsjeong5/MNIST-for-Numpy 
 ##### -------------------------------------------------------
+import os
 
 import numpy as np
 from urllib import request
@@ -37,8 +38,8 @@ def init():
     download_mnist()
     save_mnist()
 
-def load():
-    with open("mnist.pkl",'rb') as f:
+def load(path_to_mnist):
+    with open(os.path.join(path_to_mnist, "mnist.pkl"),'rb') as f:
         mnist = pickle.load(f)
     return mnist["training_images"], mnist["training_labels"], mnist["test_images"], mnist["test_labels"]
 

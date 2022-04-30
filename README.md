@@ -9,7 +9,7 @@ MNIST is loaded using this extremely helpful script: https://github.com/hsjeong5
 Upon cloning, run `python3 mnist.py` to download and save a local version of the dataset. 
 One initialized (it will be saved in `mnist.pkl`), you can load the data as follows:
 ```python
-x_train, t_train, x_test, t_test = mnist.load()
+x_train, t_train, x_test, t_test = mnist.load(path_to_folder_with_mnist_pickle)
 ```
 
 Note that we need to further apply some filters to this data, but that's easy to handle.

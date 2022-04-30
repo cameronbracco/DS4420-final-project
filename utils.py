@@ -1,31 +1,40 @@
-import numpy as np
+import torch
 from PIL import Image
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
-def intensityFilter(data, threshold):
-    if data > threshold:
-        return 1
+def render(data, is_full_scale=False):
+    if is_full_scale:
+        img = Image.fromarray(data.reshape(28, 28))  # Assuming already scaled
     else:
-        return 0
+        img = Image.fromarray((data * 255).reshape(28, 28))  # Scale all 1's to 255
+    img.show()  # Show the image
 
 
-def convertToFullScale(data):
-    return data * 255
+def validation(model, device, num_examples, x, y):
+    correct_count_val = 0
 
+    predictions, y_trues, correct_count_train_per_class = [0] * 10, [0] * 10, [0] * 10
 
-def render(data, isFullScale=False):
-    if isFullScale:
-        img = Image.fromarray(vectorizedFullScale(data).reshape(28,28)) # Scaling 1 = 255
-    else:
-        img = Image.fromarray(data.reshape(28,28)) # Assuming already scaled
-    img.show() # Show the image
+    preds = torch.zeros_like(y, device=device)
 
-
-def validation(model, numExamples, X, y):
-    correctCountVal = 0
-    for i in range(numExamples):
-        pred, spikeCounts = model.forward(X[i])
+    x.to(device)
+    y.to(device)
+    for i in range(num_examples):
+        pred = model.predict(x[i, :])
+        preds[i] = pred
 
         if pred == y[i]:
-            correctCountVal += 1
-    
-    return correctCountVal
+            correct_count_val += 1
+            correct_count_train_per_class[y[i]] += 1
+
+        predictions[pred] += 1
+        y_trues[y[i]] += 1
+
+    preds = preds.cpu().numpy()
+    y.cpu().numpy()
+    acc_score = accuracy_score(y, preds)
+    p_score = precision_score(y, preds, average='macro')
+    r_score = recall_score(y, preds, average='macro')
+    f_score = f1_score(y, preds, average='macro')
+
+    return correct_count_val, predictions, y_trues, correct_count_train_per_class, (acc_score, p_score, r_score, f_score)

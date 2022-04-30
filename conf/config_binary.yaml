@@ -1,0 +1,54 @@
+training:
+  num_examples_train: 1000 # use -1 for all
+  num_examples_val: 1000 # use -1 for all
+  num_epochs: 51
+  shuffle_batches: True
+  must_learn_every_n_iters: 100
+network:
+  input_size: 784
+  output_size: 2
+  num_neurons_per_column: 256
+  num_connections_per_column: 10
+  spike_threshold: 1000000
+  max_connection_weight: 1000000
+  min_overall_neuron_update_threshold: 300000
+  max_overall_neuron_update_threshold: 1200000
+  initial_connection_weight:
+    weight_value: False
+    delta_min: 0
+    delta_max: 1
+  positive_reinforce_amount: 500
+  negative_reinforce_amount: -500
+  positive_quantilizer:
+    inc_value: 19
+    dec_value: 1
+    denom: 100
+  negative_quantilizer:
+    inc_value: 19
+    dec_value: 1
+    denom: 100
+  decay_amount: 20
+  prune_weight: 97000
+  max_neurons_to_grow_from_on_sample: 10
+  decay_prune_every_n_samples: 100
+preprocessing:
+  pixel_intensity_levels:
+    1
+    64
+    128
+    192
+general:
+  log_level: ERROR
+  update_pbar_n_times_per_epoch: 10
+  device: auto
+  random_seed: 42
+  dataset_name: mnist_fmnist
+wandb:
+  tags:
+    binary
+  mode: online
+checkpointing:
+  save_every_n_epochs: 10
+  save_best_by_val_acc: True
+  name: 'sonn_{dataset_name}'
+  model_out_path: './sonn_{dataset_name}.pickle'

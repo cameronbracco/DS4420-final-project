@@ -1,4 +1,10 @@
 numpy
 wandb
-Pillow
+pillow
 tqdm
+torch
+hydra-core
+omegaconf
+sklearn
+scikit-learn
+matplotlib

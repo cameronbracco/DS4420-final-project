@@ -38,11 +38,11 @@ class SONN:
         # Update receptors
         for receptor in self.receptors:
             receptor.update(sample)
-        
+
         # Grow connections
         for column in self.columns:
             column.grow_connections()
-        
+
         # Count spikes for each column
         spikeCounts = list(map(lambda column: column.spike_count(), self.columns))
 
@@ -52,7 +52,7 @@ class SONN:
         # Cleanup stuff for each column
         for column in self.columns:
             column.decay_and_prune()
-    
+
         return predictedColumnIdx, spikeCounts
         
     def learn(self, sample, trueColumnIdx):
@@ -64,7 +64,7 @@ class SONN:
         
         # Then isolate the false columns and find the maximum spike count
         falseColumnSpikeCounts = spikeCounts[:trueColumnIdx] + spikeCounts[trueColumnIdx + 1:]
-        maxFalseSpikeCount = np.argmax(falseColumnSpikeCounts)
+        maxFalseSpikeCount = np.amax(falseColumnSpikeCounts)
 
         # Learn (if necessary) on the true column
         trueColumn = self.columns[trueColumnIdx]

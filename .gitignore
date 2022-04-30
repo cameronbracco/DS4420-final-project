@@ -1,7 +1,16 @@
 __pycache__
 cmake-build-debug
 wandb
+venv
 
 mnist.pkl
 *.gz
+
 .idea
+outputs
+*ubyte
+*.gz
+
+cmake-build-debug
+data
+multirun
