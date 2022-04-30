@@ -1,6 +1,5 @@
 from typing import Union, List
 
-import hydra
 from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
@@ -12,7 +11,9 @@ from torch.optim import Adam
 from torchmetrics import Accuracy
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
-from mnist_datamodule import MNISTDataModule
+# from mnist_datamodule import MNISTDataModule
+
+from fashion_mnist_datamodule import FashionMNISTDataModule
 
 
 class SimpleFFN(LightningModule):
@@ -105,17 +106,18 @@ class SimpleFFN(LightningModule):
         digit_f1 = f1_score(labels, preds, average=None)
 
         for i in range(10):
-            self.log(f"{prefix}_precision/{i}", digit_precision[i])
-            self.log(f"{prefix}_recall/{i}", digit_recall[i])
-            self.log(f"{prefix}_f1/{i}", digit_f1[i])
+            if i < len(digit_precision):
+                self.log(f"{prefix}_precision/{i}", digit_precision[i])
+            if i < len(digit_recall):
+                self.log(f"{prefix}_recall/{i}", digit_recall[i])
+            if i < len(digit_f1):
+                self.log(f"{prefix}_f1/{i}", digit_f1[i])
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=self.learning_rate)
 
 
-@hydra.main(config_path="conf", config_name="config")
-def main(cfg: DictConfig):
-
+def main():
     wandb_logger = WandbLogger(
         entity="dpis-disciples",
         project='ml2-project-ffn'
@@ -127,24 +129,27 @@ def main(cfg: DictConfig):
         10
     )
 
-    mnist_datamodule = MNISTDataModule('.', batch_size=128)
-    mnist_datamodule.prepare_data()
-    mnist_datamodule.setup()
+    # mnist_datamodule = MNISTDataModule('.', batch_size=128)
+    # mnist_datamodule.prepare_data()
+    # mnist_datamodule.setup()
+
+    fmnist_datamodule = FashionMNISTDataModule('.', batch_size=4)
 
     checkpoint_callback = ModelCheckpoint(dirpath="model_checkpoints", save_top_k=3, monitor="val_loss")
 
     trainer = Trainer(
         callbacks=[checkpoint_callback],
         auto_lr_find=True,
-        accelerator='gpu',  # 'gpu',
-        devices=[0],
+        accelerator='cpu',  # 'gpu',
+        devices=1,
         max_epochs=100,
         logger=wandb_logger
     )
 
     # trainer.tune(model, datamodule=mnist_datamodule)
 
-    trainer.fit(model, datamodule=mnist_datamodule)
+    # trainer.fit(model, datamodule=mnist_datamodule)
+    trainer.fit(model, datamodule=fmnist_datamodule)
 
     print(f"Best model ({checkpoint_callback.best_model_score}) at: {checkpoint_callback.best_model_path}")
 
