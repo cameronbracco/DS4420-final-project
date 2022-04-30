@@ -5,6 +5,7 @@
 // if have a GPU: uncomment #define GPU and see your CUDA documentation.
 //
 //  throughout, variable ‘a’ is a group, ’n’ a neuron in a group, ‘s’ a connection in a neuron
+
 #define CPU_THREAD 4
 // warning without GPU: 180 hours with 4 threads to 98.9% , 18h to 98.65%
 
@@ -295,7 +296,6 @@ int test() {
 
     testMultiThreadedManager();
 
-
     // At this point we have the spike counts for all samples in the batch
     // Now we need to evaluate how well we did
     for (int indexInSplit = 0; indexInSplit < splitSizes[splitIndex]; indexInSplit++) {
@@ -416,7 +416,7 @@ void connect(int maxConnectionsToGrow, int sampleIdx, int column, int initialWei
                     if (!weights[column][neuron][connection]) {
                         p0++;
                     }
-                }`
+                }
             }
         }
 
@@ -587,7 +587,7 @@ void batch() {
                 learn(sampleIdx, yTrue, adjp);
                 nblearn++;
                 numSamplesLearnedFrom++;
-                if (nblearn % losswNb == 0) {
+                if (lossw && nblearn % losswNb == 0) {
                     loss(numSamplesLearnedFrom);
                 }
             }
