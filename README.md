@@ -8,11 +8,18 @@ Upon cloning, run `python3 mnist.py` to download and save a local version of the
 
 ## Running Stuff
 
-NOTE: Before you run the first time, make sure you have run `pip install wandb` and logged in
+NOTE: Before you run the first time, make sure you have run `pip install wandb` and log in
 using `wandb login` 
 
-Once logged in with `wandb` running should be as simple as `python3 main.py`
-
 If you do not want to sync data to the cloud, run `wandb offline`. This can then be toggled again
-using `wandb online`. 
+using `wandb online`. You probably want to run in offline mode. 
 
+To run our model with MNIST, set the dataset name in config.yaml to "mnist".
+Run main.py
+
+To run our model with Fashion-MNIST, set the dataset name in config.yaml to "fmnist".
+Run main.py
+
+To run our model with CIFAR-10, set the dataset name in config.yaml to "cifar10". 
+For CIFAR, look at the cifar config file for the hyper parameter values. 
+Run main.py
